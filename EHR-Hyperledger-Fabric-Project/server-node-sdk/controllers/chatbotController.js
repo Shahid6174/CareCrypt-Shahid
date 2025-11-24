@@ -17,9 +17,15 @@ exports.startConversation = async (req, res, next) => {
     const userId = req.user.id;
     
     // Get user to determine role
-    const user = await User.findOne({ userId });
+    let user = await User.findOne({ userId });
+    // Allow env-configured admin (local/testing) to start conversation even if not in MongoDB
+    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
     if (!user) {
-      return res.status(404).send(responses.error('User not found'));
+      if (userId === ADMIN_USERID) {
+        user = { role: 'admin', name: 'System Admin', userId: ADMIN_USERID };
+      } else {
+        return res.status(404).send(responses.error('User not found'));
+      }
     }
 
     // Create new conversation
@@ -193,10 +199,12 @@ exports.getSuggestions = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    const user = await User.findOne({ userId });
-    if (!user) {
-      return res.status(404).send(responses.error('User not found'));
+    let user = await User.findOne({ userId });
+    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
+    if (!user && userId === ADMIN_USERID) {
+      user = { role: 'admin', name: 'System Admin', userId: ADMIN_USERID };
     }
+    if (!user) return res.status(404).send(responses.error('User not found'));
 
     const suggestions = chatbotService.getQuickSuggestions(user.role);
 

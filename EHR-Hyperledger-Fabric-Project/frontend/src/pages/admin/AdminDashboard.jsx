@@ -23,14 +23,18 @@ const AdminDashboard = () => {
     doctorId: '',
     hospitalId: '',
     name: '',
-    city: ''
+    city: '',
+    email: '',
+    password: ''
   })
   const [agentForm, setAgentForm] = useState({
     adminId: '',
     agentId: '',
     insuranceId: '',
     name: '',
-    city: ''
+    city: '',
+    email: '',
+    password: ''
   })
 
   useEffect(() => {
@@ -97,7 +101,9 @@ const AdminDashboard = () => {
         doctorId: doctorForm.doctorId,
         hospitalId: hospitalId,
         name: doctorForm.name,
-        city: doctorForm.city
+        city: doctorForm.city,
+        email: doctorForm.email,
+        password: doctorForm.password
       })
 
       if (response.data.success) {
@@ -108,7 +114,9 @@ const AdminDashboard = () => {
           doctorId: '',
           hospitalId: '',
           name: '',
-          city: ''
+          city: '',
+          email: '',
+          password: ''
         })
         // Reset header
         api.defaults.headers.common['x-userid'] = user.userId
@@ -141,7 +149,9 @@ const AdminDashboard = () => {
         agentId: agentForm.agentId,
         insuranceId: insuranceId,
         name: agentForm.name,
-        city: agentForm.city
+        city: agentForm.city,
+        email: agentForm.email,
+        password: agentForm.password
       })
 
       if (response.data.success) {
@@ -152,7 +162,9 @@ const AdminDashboard = () => {
           agentId: '',
           insuranceId: '',
           name: '',
-          city: ''
+          city: '',
+          email: '',
+          password: ''
         })
       }
       // Reset header
@@ -467,6 +479,28 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                        <input
+                          type="email"
+                          value={doctorForm.email}
+                          onChange={(e) => setDoctorForm({ ...doctorForm, email: e.target.value })}
+                          placeholder="doctor@example.com"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
+                        <input
+                          type="password"
+                          value={doctorForm.password}
+                          onChange={(e) => setDoctorForm({ ...doctorForm, password: e.target.value })}
+                          placeholder="Enter a secure password"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          required
+                        />
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Doctor Name *</label>
                         <input
                           type="text"
@@ -546,6 +580,28 @@ const AdminDashboard = () => {
                           value={agentForm.insuranceId}
                           onChange={(e) => setAgentForm({ ...agentForm, insuranceId: e.target.value })}
                           placeholder="Insurance01"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                        <input
+                          type="email"
+                          value={agentForm.email}
+                          onChange={(e) => setAgentForm({ ...agentForm, email: e.target.value })}
+                          placeholder="agent@example.com"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
+                        <input
+                          type="password"
+                          value={agentForm.password}
+                          onChange={(e) => setAgentForm({ ...agentForm, password: e.target.value })}
+                          placeholder="Enter a secure password"
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                           required
                         />

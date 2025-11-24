@@ -16,7 +16,9 @@ const Login = () => {
     { value: 'patient', label: 'Patient', icon: <FiHeart className="w-6 h-6" />, color: 'bg-pink-500' },
     { value: 'doctor', label: 'Doctor', icon: <FiUserCheck className="w-6 h-6" />, color: 'bg-blue-500' },
     { value: 'insurance', label: 'Insurance Agent', icon: <FiDollarSign className="w-6 h-6" />, color: 'bg-green-500' },
-    { value: 'admin', label: 'Admin', icon: <FiShield className="w-6 h-6" />, color: 'bg-purple-500' }
+    { value: 'hospitalAdmin', label: 'Hospital Admin', icon: <FiShield className="w-6 h-6" />, color: 'bg-indigo-600' },
+    { value: 'insuranceAdmin', label: 'Insurance Admin', icon: <FiShield className="w-6 h-6" />, color: 'bg-emerald-600' },
+    { value: 'admin', label: 'System Admin', icon: <FiShield className="w-6 h-6" />, color: 'bg-purple-500' }
   ]
 
   const handleSubmit = async (e) => {

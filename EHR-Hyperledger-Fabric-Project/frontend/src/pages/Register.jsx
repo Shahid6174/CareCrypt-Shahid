@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import api from '../services/api'
+import { submitRegistrationRequest } from '../services/registrationService'
 import { FiShield, FiUserCheck, FiDollarSign, FiHeart, FiUserPlus, FiMail, FiLock } from 'react-icons/fi'
 
 const Register = () => {
@@ -113,15 +114,31 @@ const Register = () => {
 
       if (response.data.success) {
         toast.success(response.data.data?.message || 'Registration successful! Your userId has been generated. An admin will complete your blockchain registration shortly.')
-        
-        // Show userId to user
+
+        // Show userId to user for longer so they can copy/store it
         if (response.data.data?.userId) {
-          toast.info(`Your User ID: ${response.data.data.userId}. Please save this for future reference.`)
+          toast.info(`Your User ID: ${response.data.data.userId}. Please save this for future reference.`, { autoClose: 10000 })
+        }
+
+        // Also register a local registration request so admin dashboard (local) sees it
+        try {
+          const requestData = {
+            userId: response.data.data?.userId,
+            email,
+            name: formData.name || '',
+            dob: formData.dob || '',
+            city: formData.city || '',
+            doctorId: formData.doctorId || null
+          }
+          // store in local registration queue for admin UI
+          submitRegistrationRequest(selectedRole, requestData)
+        } catch (err) {
+          console.warn('Could not store local registration request:', err.message)
         }
 
         setTimeout(() => {
           navigate('/login', { state: { email, role: selectedRole } })
-        }, 3000)
+        }, 10000)
       } else {
         toast.error(response.data.message || 'Registration failed')
       }

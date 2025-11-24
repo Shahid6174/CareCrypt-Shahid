@@ -63,9 +63,15 @@ export const AuthProvider = ({ children }) => {
         case 'insurance':
           endpoint = '/auth/loginInsuranceAgent'
           break
+        case 'hospitalAdmin':
+          endpoint = '/auth/loginHospitalAdmin'
+          break
+        case 'insuranceAdmin':
+          endpoint = '/auth/loginInsuranceAdmin'
+          break
         case 'admin':
-          // Admin login uses patient endpoint for now
-          endpoint = '/auth/loginPatient'
+          // Admin login uses dedicated admin endpoint
+          endpoint = '/auth/loginAdmin'
           break
         default:
           throw new Error('Invalid role')

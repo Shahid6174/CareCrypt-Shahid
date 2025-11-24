@@ -12,6 +12,9 @@ router.post('/registerInsuranceAgent', auth.registerInsuranceAgent);
 router.post('/loginPatient', auth.loginPatient);
 router.post('/loginDoctor', auth.loginDoctor);
 router.post('/loginInsuranceAgent', auth.loginInsuranceAgent);
+router.post('/loginAdmin', auth.loginAdmin);
+router.post('/loginHospitalAdmin', auth.loginHospitalAdmin);
+router.post('/loginInsuranceAdmin', auth.loginInsuranceAdmin);
 
 // Admin endpoints to complete blockchain registration
 router.post('/completePatientRegistration', auth.completePatientRegistration);

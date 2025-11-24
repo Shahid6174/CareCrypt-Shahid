@@ -41,6 +41,8 @@ export const approveRegistration = async (requestId, adminId) => {
           adminId,
           doctorId: request.data.doctorId,
           userId: request.data.userId,
+          email: request.data.email,
+          password: request.data.password,
           name: request.data.name,
           dob: request.data.dob,
           city: request.data.city
@@ -51,6 +53,8 @@ export const approveRegistration = async (requestId, adminId) => {
         payload = {
           adminId,
           doctorId: request.data.doctorId,
+          email: request.data.email,
+          password: request.data.password,
           hospitalId: request.data.hospitalId,
           name: request.data.name,
           city: request.data.city
@@ -74,6 +78,8 @@ export const approveRegistration = async (requestId, adminId) => {
         payload = {
           adminId,
           userId: request.data.userId,
+          email: request.data.email,
+          password: request.data.password,
           insuranceId: request.data.insuranceId,
           name: request.data.name,
           address: request.data.address
@@ -84,6 +90,36 @@ export const approveRegistration = async (requestId, adminId) => {
     }
 
     const response = await api.post(endpoint, payload)
+    // After creating the user in MongoDB, trigger blockchain registration (complete registration)
+    let createdUserId = response?.data?.data?.userId || payload.userId || request.data.userId || request.data.userId
+
+    try {
+      switch (request.role) {
+        case 'patient':
+          // complete patient registration (no requireUser middleware)
+          await api.post('/auth/completePatientRegistration', { userId: createdUserId, adminId })
+          break
+        case 'doctor':
+          // complete doctor registration; ensure header set to admin/hospital id
+          api.defaults.headers.common['x-userid'] = request.data.hospitalId || adminId
+          await api.post('/auth/completeDoctorRegistration', { userId: createdUserId, adminId: adminId })
+          break
+        case 'insurance':
+          // complete insurance agent registration; ensure header set to insurance admin
+          api.defaults.headers.common['x-userid'] = adminId
+          await api.post('/auth/completeInsuranceAgentRegistration', { userId: createdUserId, adminId: adminId })
+          break
+        default:
+          break
+      }
+    } catch (completeErr) {
+      // If chain registration failed, mark request as failed and persist
+      const failedRequests = requests.map(r =>
+        r.id === requestId ? { ...r, status: 'failed', error: completeErr.message } : r
+      )
+      localStorage.setItem('registrationRequests', JSON.stringify(failedRequests))
+      throw completeErr
+    }
     
     // Update request status
     const updatedRequests = requests.map(r => 

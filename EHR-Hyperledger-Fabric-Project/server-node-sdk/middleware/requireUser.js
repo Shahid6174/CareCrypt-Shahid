@@ -37,7 +37,22 @@ module.exports = async (req, res, next) => {
     const wallet = await helper.getWallet();
     const identity = await wallet.get(userId);
     
+    // If identity is not found in wallet, allow a configured admin bypass for local/testing
+    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
+    const HOSPITAL_ADMIN_USERID = process.env.HOSPITAL_ADMIN_USERID || 'hospitalAdmin';
+    const INSURANCE_ADMIN_USERID = process.env.INSURANCE_ADMIN_USERID || 'insuranceAdmin';
     if (!identity) {
+      if (userId === ADMIN_USERID || userId === HOSPITAL_ADMIN_USERID || userId === INSURANCE_ADMIN_USERID) {
+        // Permit admin to proceed even if wallet identity is not present (useful for local dev)
+        req.user = {
+          id: userId,
+          uuid: userId,
+          role: 'admin',
+          mspId: null
+        };
+        return next();
+      }
+
       return res.status(401).send({ 
         success: false, 
         message: `User identity "${userId}" not found in wallet. Please register/login first.` 

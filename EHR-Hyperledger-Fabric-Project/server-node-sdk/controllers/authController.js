@@ -206,6 +206,97 @@ exports.loginInsuranceAgent = async (req, res, next) => {
   }
 };
 
+// -------------------- Admin Login --------------------
+// Supports a simple, configurable admin credential for local/testing setups.
+exports.loginAdmin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).send(responses.error('Email and password are required'));
+    }
+
+    // Read admin credentials from environment with sensible defaults
+    const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@ehr.com').toLowerCase();
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
+
+    if (email.toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return res.status(401).send(responses.error('Invalid admin email or password'));
+    }
+
+    // Return admin session info. Admin is assumed to be already enrolled on the blockchain
+    // Use the same response shape as other login endpoints so frontend finds `response.data.data.userId`
+    res.status(200).send(responses.ok({
+      success: true,
+      userId: ADMIN_USERID,
+      role: 'admin',
+      name: 'System Admin',
+      registeredOnChain: true
+    }));
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Hospital admin (hardcoded credentials for local/testing)
+exports.loginHospitalAdmin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).send(responses.error('Email and password are required'));
+    }
+
+    const HOSPITAL_ADMIN_EMAIL = (process.env.HOSPITAL_ADMIN_EMAIL || 'hospital@ehr.com').toLowerCase();
+    const HOSPITAL_ADMIN_PASSWORD = process.env.HOSPITAL_ADMIN_PASSWORD || 'hospital123';
+    const HOSPITAL_ADMIN_USERID = process.env.HOSPITAL_ADMIN_USERID || 'hospitalAdmin';
+
+    if (email.toLowerCase() !== HOSPITAL_ADMIN_EMAIL || password !== HOSPITAL_ADMIN_PASSWORD) {
+      return res.status(401).send(responses.error('Invalid hospital admin email or password'));
+    }
+
+    return res.status(200).send(responses.ok({
+      success: true,
+      userId: HOSPITAL_ADMIN_USERID,
+      role: 'admin',
+      name: 'Hospital Admin',
+      registeredOnChain: true
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Insurance admin (hardcoded credentials for local/testing)
+exports.loginInsuranceAdmin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).send(responses.error('Email and password are required'));
+    }
+
+    const INSURANCE_ADMIN_EMAIL = (process.env.INSURANCE_ADMIN_EMAIL || 'insurance@ehr.com').toLowerCase();
+    const INSURANCE_ADMIN_PASSWORD = process.env.INSURANCE_ADMIN_PASSWORD || 'insurance123';
+    const INSURANCE_ADMIN_USERID = process.env.INSURANCE_ADMIN_USERID || 'insuranceAdmin';
+
+    if (email.toLowerCase() !== INSURANCE_ADMIN_EMAIL || password !== INSURANCE_ADMIN_PASSWORD) {
+      return res.status(401).send(responses.error('Invalid insurance admin email or password'));
+    }
+
+    return res.status(200).send(responses.ok({
+      success: true,
+      userId: INSURANCE_ADMIN_USERID,
+      role: 'admin',
+      name: 'Insurance Admin',
+      registeredOnChain: true
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
 // -------------------- Registration Controllers (New Flow) --------------------
 
 exports.registerPatient = async (req, res, next) => {
