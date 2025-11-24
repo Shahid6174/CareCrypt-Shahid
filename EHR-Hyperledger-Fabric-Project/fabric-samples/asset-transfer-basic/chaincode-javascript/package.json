@@ -1,5 +1,5 @@
 {
-    "name": "ehr-chaincode",
+    "name": "asset-transfer-basic",
     "version": "1.0.0",
     "description": "Asset-Transfer-Basic contract implemented in JavaScript",
     "main": "index.js",
