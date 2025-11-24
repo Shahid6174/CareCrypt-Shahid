@@ -1,0 +1,60 @@
+GENERAL HOSPITAL
+Medical Record
+
+Patient Name: John Smith
+Date of Birth: January 15, 1985
+Patient ID: P-12345
+Date: November 24, 2025
+
+CHIEF COMPLAINT:
+Severe abdominal pain and fever
+
+HISTORY OF PRESENT ILLNESS:
+The patient is a 39-year-old male who presented to the emergency department with acute onset of right lower quadrant abdominal pain that started approximately 12 hours ago. The pain is sharp, constant, and has progressively worsened. He also reports nausea, vomiting, and fever up to 101.5°F.
+
+PHYSICAL EXAMINATION:
+Vital Signs:
+- Temperature: 101.5°F
+- Blood Pressure: 130/85 mmHg
+- Heart Rate: 95 bpm
+- Respiratory Rate: 18/min
+
+Abdomen: Tender to palpation in right lower quadrant with positive McBurney's point tenderness and rebound tenderness.
+
+DIAGNOSIS:
+Acute Appendicitis
+
+TREATMENT PLAN:
+Emergency appendectomy recommended. Patient was counseled about the procedure, risks, and benefits. Consent obtained.
+
+PROCEDURE PERFORMED:
+Laparoscopic Appendectomy
+
+SURGEON: Dr. Sarah Johnson, MD
+ANESTHESIOLOGIST: Dr. Michael Chen, MD
+
+HOSPITAL CHARGES:
+Surgery Fee: $5,000.00
+Anesthesia: $1,200.00
+Hospital Room (2 days): $2,400.00
+Laboratory Tests: $450.00
+Medications: $350.00
+Total: $9,400.00
+
+MEDICATIONS PRESCRIBED:
+1. Ciprofloxacin 500mg - twice daily for 7 days
+2. Metronidazole 500mg - three times daily for 7 days
+3. Acetaminophen 650mg - as needed for pain
+
+POST-OPERATIVE NOTES:
+Patient tolerated the procedure well. No complications noted. Appendix was inflamed and perforated. Patient will be monitored for 48 hours and then discharged with follow-up appointment in 2 weeks.
+
+FOLLOW-UP:
+Scheduled follow-up appointment: December 8, 2025
+
+Doctor's Signature: Dr. Sarah Johnson, MD
+License Number: MD-78945
+Date: November 24, 2025
+
+This is a legitimate medical document for insurance claim processing.
+
