@@ -1,3 +1,4 @@
+require('dotenv').config();
 const DEFAULT_GITHUB_ENDPOINT = 'https://models.inference.ai.azure.com';
 let cachedFetch = typeof fetch === 'function' ? fetch : null;
 
@@ -56,27 +57,27 @@ class ModelGateway {
     const fetchFn = await getFetch();
     const endpoint = (this.github.endpoint || DEFAULT_GITHUB_ENDPOINT).replace(/\/$/, '');
     const url = `${endpoint}/chat/completions`;
+
+    const body = {
+      model: this.github.model,
+      messages,
+      temperature: options.temperature ?? 0.7,
+      ...options
+    };
+
     const response = await fetchFn(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.github.token}`,
         'Content-Type': 'application/json',
-        Accept: 'application/json'
+        'X-GitHub-Api-Version': '2023-07-01-preview'
       },
-      body: JSON.stringify({
-        model: this.github.model,
-        messages,
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.maxTokens,
-        top_p: options.topP,
-        frequency_penalty: options.frequencyPenalty,
-        presence_penalty: options.presencePenalty
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`GitHub Models error (${response.status}): ${errorText}`);
+      throw new Error(`GitHub Models Error ${response.status}: ${errorText}`);
     }
 
     return response.json();

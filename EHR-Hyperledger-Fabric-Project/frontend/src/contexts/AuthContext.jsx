@@ -13,6 +13,7 @@ export const useAuth = () => {
 
 const ROLE_DASHBOARD_MAP = {
   admin: '/admin/dashboard',
+  systemAdmin: '/admin/dashboard',
   hospitalAdmin: '/admin/dashboard',
   insuranceAdmin: '/admin/dashboard',
   patient: '/patient/dashboard',

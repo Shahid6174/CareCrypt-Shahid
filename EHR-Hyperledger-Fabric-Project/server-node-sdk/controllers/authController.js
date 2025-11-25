@@ -310,7 +310,7 @@ exports.loginAdmin = async (req, res, next) => {
     res.status(200).send(responses.ok({
       success: true,
       userId: ADMIN_USERID,
-      role: 'admin',
+      role: 'systemAdmin',
       name: 'System Admin',
       registeredOnChain: true
     }));
@@ -339,7 +339,7 @@ exports.loginHospitalAdmin = async (req, res, next) => {
     return res.status(200).send(responses.ok({
       success: true,
       userId: HOSPITAL_ADMIN_USERID,
-      role: 'admin',
+      role: 'hospitalAdmin',
       name: 'Hospital Admin',
       registeredOnChain: true
     }));
@@ -368,7 +368,7 @@ exports.loginInsuranceAdmin = async (req, res, next) => {
     return res.status(200).send(responses.ok({
       success: true,
       userId: INSURANCE_ADMIN_USERID,
-      role: 'admin',
+      role: 'insuranceAdmin',
       name: 'Insurance Admin',
       registeredOnChain: true
     }));

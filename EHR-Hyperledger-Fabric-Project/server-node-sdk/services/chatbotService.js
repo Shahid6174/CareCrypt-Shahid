@@ -115,11 +115,9 @@ Important guidelines:
     ];
   }
 
-  buildFallbackResponse(userMessage, userRole, isError = false) {
-    const defaultMessage = isError
-      ? '⚠️ I ran into an error processing that. Please try again in a moment.'
-      : '🤖 The AI assistant is unavailable right now. Please try again shortly.';
-
+  buildFallbackResponse(userMessage, userRole, { intent, customMessage } = {}) {
+    const detectedIntent = intent || this.analyzeIntent(userMessage);
+    const defaultMessage = customMessage || this.getOfflineResponse(detectedIntent, userRole);
     return {
       message: defaultMessage,
       timestamp: new Date().toISOString(),
@@ -129,32 +127,40 @@ Important guidelines:
     };
   }
 
-  async callModel(messages) {
-    const client = githubModels.getClient();
-    if (!githubModels.isReady()) {
-      throw new Error('GitHub Models client is not configured');
-    }
-
-    const response = await client
-      .path('/chat/completions')
-      .post({
-        body: {
-          model: githubModels.getModel(),
-          messages,
-          temperature: 0.7
-        }
-      });
-
-    if (isUnexpected(response)) {
-      const errorBody = JSON.stringify(response.body);
-      throw new Error(`GitHub Models responded unexpectedly: ${errorBody}`);
-    }
-
-    const choice = response.body.choices?.[0]?.message?.content;
-    return {
-      content: choice || 'I am sorry, but I do not have a response right now.',
-      usage: response.body.usage || {}
+  getOfflineResponse(intent, role) {
+    const roleKey = ['patient', 'doctor', 'insuranceAgent', 'admin'].includes(role) ? role : 'patient';
+    const responses = {
+      claim_submission: {
+        patient: 'Open the Claims tab, click “Submit New Claim”, attach your documents, and monitor the status cards for approvals.',
+        doctor: 'Head to “Claims to Verify” to review pending requests. Approve or reject after checking medical records.',
+        insuranceAgent: 'Go to Claims → Pending to review submissions. Approve/reject with notes so patients get notified.',
+        admin: 'Use the analytics dashboard to monitor claim load and pending approvals.'
+      },
+      document_upload: {
+        patient: 'Use Documents → Upload Document, choose the category, and add a short description. PDF and image files up to 10 MB are supported.',
+        doctor: 'Attach supporting files inside each patient record so claims reviewers can see them immediately.',
+        insuranceAgent: 'Download patient evidence from the claim drawer; upload annotated documents if you need to add context.',
+        admin: 'Admins can filter uploaded files from the analytics → documents list.'
+      },
+      fraud_help: {
+        patient: 'Fraud warnings appear at the top of your dashboard. Avoid duplicate submissions and make sure scans are clear. Contact support if you get blocked.',
+        doctor: 'Ensure diagnoses, treatment notes, and attached documents align before verifying claims to prevent fraud flags.',
+        insuranceAgent: 'Use Fraud Management to see flagged claims and mark them resolved once reviewed.',
+        admin: 'Admins can unblock or flag accounts from the Fraud Management console.'
+      },
+      access_control: {
+        patient: 'Open Access Control → enter the doctor ID → Grant Access. Revoke access the same way when you’re done.',
+        doctor: 'Ask patients to grant you access from their dashboard. Once granted, records show up under “My Patients”.',
+        insuranceAgent: 'Agents automatically see documents tied to each assigned claim.',
+        admin: 'Admins can override access via the ledger tools if required.'
+      },
+      general: {
+        default: 'I can help with claims, documents, access control, fraud alerts, and analytics. Let me know what you need!'
+      }
     };
+
+    const intentBucket = responses[intent] || responses.general;
+    return intentBucket[roleKey] || intentBucket.default || responses.general.default;
   }
 
   async callModel(messages) {
@@ -167,9 +173,10 @@ Important guidelines:
   }
 
   async chat(userMessage, history = [], userRole = 'patient') {
+    const intent = this.analyzeIntent(userMessage);
     try {
       if (!llmGateway.isReady()) {
-        throw new Error('LLM service is not configured');
+        throw new Error('LLM_NOT_CONFIGURED');
       }
 
       const messages = this.buildMessages(userRole, history, userMessage);
@@ -186,7 +193,13 @@ Important guidelines:
       };
     } catch (error) {
       console.error('❌ Chatbot error:', error.message);
-      return this.buildFallbackResponse(userMessage, userRole, true);
+      const customMessage = error.message === 'LLM_NOT_CONFIGURED'
+        ? 'The AI model is not configured yet. Please ask an admin to add the GitHub/Azure credentials. Meanwhile, here is a quick tip:'
+        : undefined;
+      return this.buildFallbackResponse(userMessage, userRole, {
+        intent,
+        customMessage
+      });
     }
   }
 }
