@@ -15,6 +15,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 const ROLE_TO_PATH = {
   admin: '/admin/dashboard',
+  systemAdmin: '/admin/dashboard',
   hospitalAdmin: '/admin/dashboard',
   insuranceAdmin: '/admin/dashboard',
   patient: '/patient/dashboard',
@@ -63,7 +64,7 @@ function AppRoutes() {
       />
       
       <Route path="/admin/dashboard" element={
-        <ProtectedRoute role="admin">
+        <ProtectedRoute role={['admin', 'systemAdmin', 'hospitalAdmin', 'insuranceAdmin']}>
           <AdminDashboard />
         </ProtectedRoute>
       } />

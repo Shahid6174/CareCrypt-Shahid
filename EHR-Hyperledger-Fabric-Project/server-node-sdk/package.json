@@ -26,6 +26,7 @@
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.9",
     "tesseract.js": "^5.0.4",
+    "typed.js": "^2.1.0",
     "uuid": "^9.0.1"
   }
 }

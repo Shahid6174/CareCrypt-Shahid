@@ -80,7 +80,7 @@ const AnalyticsDashboard = ({ analytics, role }) => {
           </>
         )}
 
-        {role === 'admin' && (
+        {role === 'systemAdmin' && (
           <>
             <StatCard icon={FiUser} label="Total Users" value={analytics.overview.totalUsers} color="blue" />
             <StatCard icon={FiCheckCircle} label="Recent Registrations" value={analytics.overview.recentRegistrations} color="green" />
@@ -91,7 +91,7 @@ const AnalyticsDashboard = ({ analytics, role }) => {
       </div>
 
       {/* Badge & Streak */}
-      {role !== 'admin' && (
+      {role !== 'systemAdmin' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Progress</h3>
@@ -164,7 +164,7 @@ const AnalyticsDashboard = ({ analytics, role }) => {
       )}
 
       {/* Admin Specific Charts */}
-      {role === 'admin' && (
+      {role === 'systemAdmin' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">User Distribution</h3>
@@ -231,7 +231,7 @@ const AnalyticsDashboard = ({ analytics, role }) => {
       )}
 
       {/* Top Users (Admin Only) */}
-      {role === 'admin' && analytics.engagementMetrics?.topUsers && (
+      {role === 'systemAdmin' && analytics.engagementMetrics?.topUsers && (
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Users</h3>
           <div className="space-y-3">

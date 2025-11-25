@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 const roleMap = {
   admin: '/admin/dashboard',
+  systemAdmin: '/admin/dashboard',
   hospitalAdmin: '/admin/dashboard',
   insuranceAdmin: '/admin/dashboard',
   patient: '/patient/dashboard',

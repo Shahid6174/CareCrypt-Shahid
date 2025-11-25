@@ -53,6 +53,22 @@ const AdminDashboard = () => {
     password: ''
   })
 
+  const normalizeRequestRole = (role = '') => (role === 'insurance' ? 'insuranceAgent' : role)
+
+  const APPROVAL_SCOPE = {
+    systemAdmin: ['patient', 'doctor', 'insuranceAgent'],
+    hospitalAdmin: ['patient', 'doctor'],
+    insuranceAdmin: ['insuranceAgent']
+  }
+
+  const allowedRequestRoles = APPROVAL_SCOPE[user?.role] || []
+  const scopedRequests = requests.filter(r => allowedRequestRoles.includes(normalizeRequestRole(r.role)))
+  const scopedPending = scopedRequests.filter(r => r.status === 'pending')
+  const scopedApproved = scopedRequests.filter(r => r.status === 'approved')
+  const scopedRejected = scopedRequests.filter(r => r.status === 'rejected')
+  const canManageDoctors = ['systemAdmin', 'hospitalAdmin'].includes(user?.role)
+  const canManageAgents = ['systemAdmin', 'insuranceAdmin'].includes(user?.role)
+
   useEffect(() => {
     loadRequests()
     loadAnalytics()
@@ -87,6 +103,12 @@ const AdminDashboard = () => {
   }
 
   const handleApprove = async (requestId) => {
+    const targetRequest = requests.find(r => r.id === requestId)
+    const targetRole = normalizeRequestRole(targetRequest?.role)
+    if (!targetRequest || !allowedRequestRoles.includes(targetRole)) {
+      toast.error('You do not have permission to approve this request.')
+      return
+    }
     try {
       await approveRegistration(requestId, user.userId)
       toast.success('Registration approved successfully!')
@@ -100,6 +122,12 @@ const AdminDashboard = () => {
     if (!window.confirm('Are you sure you want to reject this registration request?')) {
       return
     }
+    const targetRequest = requests.find(r => r.id === requestId)
+    const targetRole = normalizeRequestRole(targetRequest?.role)
+    if (!targetRequest || !allowedRequestRoles.includes(targetRole)) {
+      toast.error('You do not have permission to reject this request.')
+      return
+    }
     
     try {
       await rejectRegistration(requestId)
@@ -110,7 +138,7 @@ const AdminDashboard = () => {
     }
   }
 
-  const filteredRequests = requests.filter(r => {
+  const filteredRequests = scopedRequests.filter(r => {
     if (activeTab === 'pending') return r.status === 'pending'
     if (activeTab === 'approved') return r.status === 'approved'
     if (activeTab === 'rejected') return r.status === 'rejected'
@@ -121,6 +149,10 @@ const AdminDashboard = () => {
     e.preventDefault()
     if (!user || !user.userId) {
       toast.error('User not authenticated')
+      return
+    }
+    if (!['systemAdmin', 'hospitalAdmin'].includes(user.role)) {
+      toast.error('Only hospital or system admins can register doctors.')
       return
     }
 
@@ -162,6 +194,10 @@ const AdminDashboard = () => {
     e.preventDefault()
     if (!user || !user.userId) {
       toast.error('User not authenticated')
+      return
+    }
+    if (!['systemAdmin', 'insuranceAdmin'].includes(user.role)) {
+      toast.error('Only insurance or system admins can register insurance agents.')
       return
     }
 
@@ -338,6 +374,12 @@ const AdminDashboard = () => {
         {mainTab === 'fraud' && <FraudManagement />}
 
         {mainTab === 'requests' && (
+          allowedRequestRoles.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center">
+              <p className="text-lg font-semibold text-gray-900 mb-2">No approval permissions</p>
+              <p className="text-sm text-gray-600">Your admin role does not have access to any registration approvals. Please contact a system admin if you believe this is incorrect.</p>
+            </div>
+          ) : (
           <>
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -345,7 +387,7 @@ const AdminDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 font-medium">Total Requests</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{requests.length}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{scopedRequests.length}</p>
               </div>
               <div className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-xl">
                 <FiUsers className="w-7 h-7 text-blue-600" />
@@ -358,7 +400,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600 font-medium">Pending</p>
                 <p className="text-3xl font-bold text-yellow-600 mt-1">
-                  {requests.filter(r => r.status === 'pending').length}
+                  {scopedPending.length}
                 </p>
               </div>
               <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 p-4 rounded-xl">
@@ -372,7 +414,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600 font-medium">Approved</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">
-                  {requests.filter(r => r.status === 'approved').length}
+                  {scopedApproved.length}
                 </p>
               </div>
               <div className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-xl">
@@ -386,7 +428,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600 font-medium">Rejected</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">
-                  {requests.filter(r => r.status === 'rejected').length}
+                  {scopedRejected.length}
                 </p>
               </div>
               <div className="bg-gradient-to-br from-red-100 to-red-200 p-4 rounded-xl">
@@ -430,7 +472,9 @@ const AdminDashboard = () => {
               </div>
             ) : (
               <div className="grid gap-4">
-                {filteredRequests.map((request) => (
+                {filteredRequests.map((request) => {
+                  const displayRole = normalizeRequestRole(request.role)
+                  return (
                   <div
                     key={request.id}
                     className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-purple-300"
@@ -439,12 +483,12 @@ const AdminDashboard = () => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-4">
                           <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${
-                            request.role === 'patient' ? 'bg-pink-100 text-pink-700' :
-                            request.role === 'doctor' ? 'bg-blue-100 text-blue-700' :
-                            request.role === 'hospital' ? 'bg-purple-100 text-purple-700' :
+                            displayRole === 'patient' ? 'bg-pink-100 text-pink-700' :
+                            displayRole === 'doctor' ? 'bg-blue-100 text-blue-700' :
+                            displayRole === 'hospital' ? 'bg-purple-100 text-purple-700' :
                             'bg-green-100 text-green-700'
                           }`}>
-                            {request.role}
+                            {displayRole}
                           </span>
                           <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${
                             request.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
@@ -488,13 +532,13 @@ const AdminDashboard = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
         </div>
         </>
-        )}
+        ))}
 
         {mainTab === 'direct' && (
           <div className="space-y-6">
@@ -504,6 +548,7 @@ const AdminDashboard = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Register Doctor */}
+                {canManageDoctors && (
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
@@ -608,8 +653,10 @@ const AdminDashboard = () => {
                     </form>
                   )}
                 </div>
+                )}
 
                 {/* Register Insurance Agent */}
+                {canManageAgents && (
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
@@ -714,6 +761,12 @@ const AdminDashboard = () => {
                     </form>
                   )}
                 </div>
+                )}
+                {!canManageDoctors && !canManageAgents && (
+                  <div className="col-span-2 text-center text-sm text-gray-600 bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-6">
+                    You do not have permission to perform direct registrations.
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -38,16 +38,19 @@ module.exports = async (req, res, next) => {
     const identity = await wallet.get(userId);
     
     // If identity is not found in wallet, allow a configured admin bypass for local/testing
-    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
+  const ADMIN_USERID = process.env.ADMIN_USERID || 'systemAdmin';
     const HOSPITAL_ADMIN_USERID = process.env.HOSPITAL_ADMIN_USERID || 'hospitalAdmin';
     const INSURANCE_ADMIN_USERID = process.env.INSURANCE_ADMIN_USERID || 'insuranceAdmin';
     if (!identity) {
       if (userId === ADMIN_USERID || userId === HOSPITAL_ADMIN_USERID || userId === INSURANCE_ADMIN_USERID) {
         // Permit admin to proceed even if wallet identity is not present (useful for local dev)
+        let derivedRole = 'systemAdmin';
+        if (userId === HOSPITAL_ADMIN_USERID) derivedRole = 'hospitalAdmin';
+        if (userId === INSURANCE_ADMIN_USERID) derivedRole = 'insuranceAdmin';
         req.user = {
           id: userId,
           uuid: userId,
-          role: 'admin',
+          role: derivedRole,
           mspId: null
         };
         return next();

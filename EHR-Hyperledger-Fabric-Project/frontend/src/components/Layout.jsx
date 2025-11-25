@@ -40,6 +40,7 @@ const Layout = ({ children, title, navItems = [] }) => {
   const getRoleIcon = () => {
     switch (user?.role) {
       case 'admin':
+      case 'systemAdmin':
       case 'hospitalAdmin':
       case 'insuranceAdmin':
         return <FiShield className="w-6 h-6" />
@@ -58,6 +59,7 @@ const Layout = ({ children, title, navItems = [] }) => {
   const getRoleColor = () => {
     switch (user?.role) {
       case 'admin':
+      case 'systemAdmin':
       case 'hospitalAdmin':
       case 'insuranceAdmin':
         return 'bg-purple-500'
@@ -73,7 +75,7 @@ const Layout = ({ children, title, navItems = [] }) => {
     }
   }
 
-  const isRestricted = user?.role !== 'admin' && user?.role !== 'hospitalAdmin' && user?.role !== 'insuranceAdmin' && user?.restricted
+  const isRestricted = !['admin', 'systemAdmin', 'hospitalAdmin', 'insuranceAdmin'].includes(user?.role) && user?.restricted
 
   const handleCopyUserId = async () => {
     if (!user?.userId || !navigator?.clipboard) return
@@ -92,7 +94,9 @@ const Layout = ({ children, title, navItems = [] }) => {
   const roleLabelMap = {
     insuranceAgent: 'insurance agent',
     hospitalAdmin: 'hospital admin',
-    insuranceAdmin: 'insurance admin'
+    insuranceAdmin: 'insurance admin',
+    systemAdmin: 'system admin',
+    admin: 'admin'
   }
   const roleLabel = roleLabelMap[user?.role] || user?.role
 
@@ -108,7 +112,7 @@ const Layout = ({ children, title, navItems = [] }) => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-                <p className="text-sm text-gray-500 capitalize">{user?.role} Dashboard</p>
+                <p className="text-sm text-gray-500 capitalize">{roleLabel} Dashboard</p>
               </div>
             </div>
             
