@@ -13,6 +13,20 @@ import DoctorDashboard from './pages/doctor/DoctorDashboard'
 import InsuranceDashboard from './pages/insurance/InsuranceDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 
+const ROLE_TO_PATH = {
+  admin: '/admin/dashboard',
+  hospitalAdmin: '/admin/dashboard',
+  insuranceAdmin: '/admin/dashboard',
+  patient: '/patient/dashboard',
+  doctor: '/doctor/dashboard',
+  insuranceAgent: '/insurance/dashboard'
+}
+
+const getDashboardPath = (user) => {
+  if (!user) return '/login'
+  return user.dashboardPath || ROLE_TO_PATH[user.role] || '/login'
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth()
 
@@ -33,7 +47,7 @@ function AppRoutes() {
           !user ? (
             <Login />
           ) : (
-            <Navigate to={`/${user.role}/dashboard`} replace />
+            <Navigate to={getDashboardPath(user)} replace />
           )
         } 
       />
@@ -43,7 +57,7 @@ function AppRoutes() {
           !user ? (
             <Register />
           ) : (
-            <Navigate to={`/${user.role}/dashboard`} replace />
+            <Navigate to={getDashboardPath(user)} replace />
           )
         } 
       />
@@ -67,21 +81,21 @@ function AppRoutes() {
       } />
       
       <Route path="/insurance/dashboard" element={
-        <ProtectedRoute role="insurance">
+        <ProtectedRoute role="insuranceAgent">
           <InsuranceDashboard />
         </ProtectedRoute>
       } />
       
       <Route path="/" element={
         user ? (
-          <Navigate to={`/${user.role}/dashboard`} replace />
+          <Navigate to={getDashboardPath(user)} replace />
         ) : (
           <Navigate to="/login" replace />
         )
       } />
       <Route path="*" element={
         user ? (
-          <Navigate to={`/${user.role}/dashboard`} replace />
+          <Navigate to={getDashboardPath(user)} replace />
         ) : (
           <Navigate to="/login" replace />
         )

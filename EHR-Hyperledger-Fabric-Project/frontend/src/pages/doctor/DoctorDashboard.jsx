@@ -22,7 +22,7 @@ const DoctorDashboard = () => {
   const [recordForm, setRecordForm] = useState({
     patientId: '',
     diagnosis: '',
-    treatment: '',
+    prescription: '',
     notes: ''
   })
 
@@ -60,9 +60,8 @@ const DoctorDashboard = () => {
   }
 
   useEffect(() => {
-    if (user && user.userId && !authLoading) {
-      loadData()
-    }
+    if (!user || !user.userId || authLoading || user.restricted) return
+    loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeTab, authLoading])
 
@@ -153,7 +152,7 @@ const DoctorDashboard = () => {
         setRecordForm({
           patientId: '',
           diagnosis: '',
-          treatment: '',
+          prescription: '',
           notes: ''
         })
         if (selectedPatient) {
@@ -261,13 +260,13 @@ const DoctorDashboard = () => {
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">Treatment *</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Prescription / Treatment *</label>
                           <input
                             type="text"
-                            value={recordForm.treatment}
-                            onChange={(e) => setRecordForm({ ...recordForm, treatment: e.target.value })}
+                            value={recordForm.prescription}
+                            onChange={(e) => setRecordForm({ ...recordForm, prescription: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                            placeholder="Enter treatment"
+                            placeholder="Prescription or treatment plan"
                             required
                           />
                         </div>

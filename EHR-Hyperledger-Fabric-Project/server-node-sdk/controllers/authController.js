@@ -1,4 +1,3 @@
-const { Wallets } = require('fabric-network');
 const FabricCAServices = require('fabric-ca-client');
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +7,49 @@ const responses = require('../utils/responses');
 const User = require('../models/User');
 const generateUserId = require('../utils/generateUserId');
 
+const registrationLocks = new Map();
+
+async function runWithRegistrationLock(key, fn) {
+  const inFlight = registrationLocks.get(key);
+  if (inFlight) {
+    try {
+      await inFlight;
+    } catch (err) {
+      // Swallow to allow next attempt after a failed registration.
+      console.warn(`Previous registration attempt for ${key} failed: ${err.message}`);
+    }
+  }
+
+  const execution = (async () => {
+    try {
+      return await fn();
+    } finally {
+      registrationLocks.delete(key);
+    }
+  })();
+
+  registrationLocks.set(key, execution);
+  return execution;
+}
+
+function getApprovalStatus(user) {
+  if (!user) return 'pending';
+  return user.approvalStatus || (user.registeredOnChain ? 'approved' : 'pending');
+}
+
+function appendApprovalHistory(user, status, notes, changedBy) {
+  if (!user) return;
+  if (!Array.isArray(user.approvalHistory)) {
+    user.approvalHistory = [];
+  }
+  user.approvalHistory.push({
+    status,
+    notes,
+    changedBy,
+    changedAt: new Date()
+  });
+}
+
 // Helper to get admin User object
 async function getAdminUser(org, adminId) {
   const ccpPath = path.resolve(__dirname, '../..', 'fabric-samples', 'test-network', 'organizations', 'peerOrganizations', `${org}.example.com`, `connection-${org}.json`);
@@ -16,8 +58,7 @@ async function getAdminUser(org, adminId) {
   const caTLSCACerts = caInfo.tlsCACerts.pem;
   const ca = new FabricCAServices(caInfo.url, { trustedRoots: caTLSCACerts, verify: false }, caInfo.caName);
 
-  const walletPath = path.join(process.cwd(), 'wallet');
-  const wallet = await Wallets.newFileSystemWallet(walletPath);
+  const wallet = await helper.getWallet();
   const adminIdentity = await wallet.get(adminId);
   if (!adminIdentity) throw new Error(`Admin identity "${adminId}" not found in wallet`);
 
@@ -29,32 +70,38 @@ async function getAdminUser(org, adminId) {
 // Generic registration function
 async function registerAndEnroll(org, adminId, enrollmentID, attrs) {
   const { ca, wallet, adminUser } = await getAdminUser(org, adminId);
+  const attrList = Array.isArray(attrs) ? attrs : [];
 
-  // Check if user already exists
-  const existing = await wallet.get(enrollmentID);
-  if (existing) return;
+  return runWithRegistrationLock(enrollmentID, async () => {
+    const existing = await wallet.get(enrollmentID);
+    if (existing) return existing;
 
-  const secret = await ca.register({ affiliation: `${org}.department1`, enrollmentID, role: 'client', attrs }, adminUser);
-  const enrollment = await ca.enroll({
-    enrollmentID,
-    enrollmentSecret: secret,
-    attr_reqs: attrs.map(a => ({ name: a.name, optional: false }))
-  });
+    const secret = await ca.register(
+      { affiliation: `${org}.department1`, enrollmentID, role: 'client', attrs: attrList },
+      adminUser
+    );
+    const enrollment = await ca.enroll({
+      enrollmentID,
+      enrollmentSecret: secret,
+      attr_reqs: attrList.map(a => ({ name: a.name, optional: false }))
+    });
+    
+    // Verify attributes are in the enrollment certificate
+    if (!enrollment.certificate) {
+      throw new Error('Enrollment failed: no certificate returned');
+    }
   
-  // Verify attributes are in the enrollment certificate
-  if (!enrollment.certificate) {
-    throw new Error('Enrollment failed: no certificate returned');
-  }
-
-  const x509Identity = {
-    credentials: {
-      certificate: enrollment.certificate,
-      privateKey: enrollment.key.toBytes(),
-    },
-    mspId: org.charAt(0).toUpperCase() + org.slice(1) + 'MSP',
-    type: 'X.509',
-  };
-  await wallet.put(enrollmentID, x509Identity);
+    const x509Identity = {
+      credentials: {
+        certificate: enrollment.certificate,
+        privateKey: enrollment.key.toBytes(),
+      },
+      mspId: org.charAt(0).toUpperCase() + org.slice(1) + 'MSP',
+      type: 'X.509',
+    };
+    await wallet.put(enrollmentID, x509Identity);
+    return x509Identity;
+  });
 }
 
 // -------------------- Login Controllers (Check MongoDB First) --------------------
@@ -83,14 +130,23 @@ exports.loginPatient = async (req, res, next) => {
       return res.status(401).send(responses.error('Invalid email or password'));
     }
 
+    const approvalStatus = getApprovalStatus(user);
+    const restricted = approvalStatus !== 'approved' || !user.registeredOnChain;
+
     // Check if user is registered on chaincode (wallet)
     const wallet = await helper.getWallet();
     const identity = await wallet.get(user.userId);
     
     if (!identity) {
       return res.status(200).send(responses.ok({ 
+        success: true,
         needsChaincodeRegistration: true,
         userId: user.userId,
+        role: 'patient',
+        name: user.name,
+        approvalStatus,
+        registeredOnChain: false,
+        restricted: true,
         message: 'Please complete your registration on the blockchain. An admin will register you shortly.'
       }));
     }
@@ -101,7 +157,9 @@ exports.loginPatient = async (req, res, next) => {
       userId: user.userId,
       role: 'patient',
       name: user.name,
-      registeredOnChain: user.registeredOnChain
+      registeredOnChain: user.registeredOnChain,
+      approvalStatus,
+      restricted
     }));
   } catch (err) { 
     next(err); 
@@ -132,14 +190,23 @@ exports.loginDoctor = async (req, res, next) => {
       return res.status(401).send(responses.error('Invalid email or password'));
     }
 
+    const approvalStatus = getApprovalStatus(user);
+    const restricted = approvalStatus !== 'approved' || !user.registeredOnChain;
+
     // Check if user is registered on chaincode (wallet)
     const wallet = await helper.getWallet();
     const identity = await wallet.get(user.userId);
     
     if (!identity) {
       return res.status(200).send(responses.ok({ 
+        success: true,
         needsChaincodeRegistration: true,
         userId: user.userId,
+        role: 'doctor',
+        name: user.name,
+        approvalStatus,
+        registeredOnChain: false,
+        restricted: true,
         message: 'Please complete your registration on the blockchain. An admin will register you shortly.'
       }));
     }
@@ -150,7 +217,9 @@ exports.loginDoctor = async (req, res, next) => {
       userId: user.userId,
       role: 'doctor',
       name: user.name,
-      registeredOnChain: user.registeredOnChain
+      registeredOnChain: user.registeredOnChain,
+      approvalStatus,
+      restricted
     }));
   } catch (err) { 
     next(err); 
@@ -181,14 +250,23 @@ exports.loginInsuranceAgent = async (req, res, next) => {
       return res.status(401).send(responses.error('Invalid email or password'));
     }
 
+    const approvalStatus = getApprovalStatus(user);
+    const restricted = approvalStatus !== 'approved' || !user.registeredOnChain;
+
     // Check if user is registered on chaincode (wallet)
     const wallet = await helper.getWallet();
     const identity = await wallet.get(user.userId);
     
     if (!identity) {
       return res.status(200).send(responses.ok({ 
+        success: true,
         needsChaincodeRegistration: true,
         userId: user.userId,
+        role: 'insuranceAgent',
+        name: user.name,
+        approvalStatus,
+        registeredOnChain: false,
+        restricted: true,
         message: 'Please complete your registration on the blockchain. An admin will register you shortly.'
       }));
     }
@@ -199,7 +277,9 @@ exports.loginInsuranceAgent = async (req, res, next) => {
       userId: user.userId,
       role: 'insuranceAgent',
       name: user.name,
-      registeredOnChain: user.registeredOnChain
+      registeredOnChain: user.registeredOnChain,
+      approvalStatus,
+      restricted
     }));
   } catch (err) { 
     next(err); 
@@ -325,7 +405,14 @@ exports.registerPatient = async (req, res, next) => {
       name,
       dob,
       city,
-      registeredOnChain: false
+      registeredOnChain: false,
+      approvalStatus: 'pending',
+      approvalNotes: 'Awaiting blockchain enrollment by admin',
+      approvalHistory: [{
+        status: 'pending',
+        notes: 'Patient self-registered via portal',
+        changedBy: 'system'
+      }]
     });
 
     await user.save();
@@ -379,7 +466,14 @@ exports.registerDoctor = async (req, res, next) => {
       name,
       hospitalId,
       city,
-      registeredOnChain: false
+      registeredOnChain: false,
+      approvalStatus: 'pending',
+      approvalNotes: 'Awaiting blockchain enrollment by admin',
+      approvalHistory: [{
+        status: 'pending',
+        notes: 'Doctor self-registered via portal',
+        changedBy: 'system'
+      }]
     });
 
     await user.save();
@@ -432,7 +526,14 @@ exports.registerInsuranceAgent = async (req, res, next) => {
       name,
       insuranceId,
       city,
-      registeredOnChain: false
+      registeredOnChain: false,
+      approvalStatus: 'pending',
+      approvalNotes: 'Awaiting blockchain enrollment by admin',
+      approvalHistory: [{
+        status: 'pending',
+        notes: 'Insurance agent self-registered via portal',
+        changedBy: 'system'
+      }]
     });
 
     await user.save();
@@ -497,6 +598,9 @@ exports.completePatientRegistration = async (req, res, next) => {
 
     // Update MongoDB
     user.registeredOnChain = true;
+    user.approvalStatus = 'approved';
+    user.approvedAt = new Date();
+    appendApprovalHistory(user, 'approved', 'Patient enrollment completed on blockchain', adminId);
     await user.save();
 
     res.status(200).send(responses.ok({ 
@@ -545,6 +649,9 @@ exports.completeDoctorRegistration = async (req, res, next) => {
 
     // Update MongoDB
     user.registeredOnChain = true;
+    user.approvalStatus = 'approved';
+    user.approvedAt = new Date();
+    appendApprovalHistory(user, 'approved', 'Doctor enrollment completed on blockchain', adminId);
     await user.save();
 
     res.status(200).send(responses.ok({ 
@@ -593,6 +700,9 @@ exports.completeInsuranceAgentRegistration = async (req, res, next) => {
 
     // Update MongoDB
     user.registeredOnChain = true;
+    user.approvalStatus = 'approved';
+    user.approvedAt = new Date();
+    appendApprovalHistory(user, 'approved', 'Insurance agent enrollment completed on blockchain', adminId);
     await user.save();
 
     res.status(200).send(responses.ok({ 

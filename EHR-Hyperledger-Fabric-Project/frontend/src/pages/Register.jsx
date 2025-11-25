@@ -13,7 +13,29 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [formData, setFormData] = useState({})
   const [loading, setLoading] = useState(false)
+  const [showUserIdModal, setShowUserIdModal] = useState(false)
+  const [generatedUserId, setGeneratedUserId] = useState('')
+  const [copiedUserId, setCopiedUserId] = useState(false)
   const navigate = useNavigate()
+  const handleCopyUserId = async () => {
+    if (!generatedUserId || !navigator?.clipboard) return
+    try {
+      await navigator.clipboard.writeText(generatedUserId)
+      setCopiedUserId(true)
+      setTimeout(() => setCopiedUserId(false), 2000)
+    } catch (error) {
+      toast.error('Unable to copy User ID automatically. Please copy it manually.')
+    }
+  }
+
+  const handleCloseModal = () => {
+    setShowUserIdModal(false)
+  }
+
+  const handleGoToLogin = () => {
+    setShowUserIdModal(false)
+    navigate('/login', { state: { email, role: selectedRole } })
+  }
 
   const roles = [
     { value: 'patient', label: 'Patient', icon: <FiHeart className="w-6 h-6" />, color: 'bg-pink-500' },
@@ -115,30 +137,36 @@ const Register = () => {
       if (response.data.success) {
         toast.success(response.data.data?.message || 'Registration successful! Your userId has been generated. An admin will complete your blockchain registration shortly.')
 
-        // Show userId to user for longer so they can copy/store it
         if (response.data.data?.userId) {
-          toast.info(`Your User ID: ${response.data.data.userId}. Please save this for future reference.`, { autoClose: 10000 })
+          setGeneratedUserId(response.data.data.userId)
+          setShowUserIdModal(true)
         }
 
         // Also register a local registration request so admin dashboard (local) sees it
         try {
+          const normalizedRole = selectedRole === 'insurance' ? 'insuranceAgent' : selectedRole
+          const registrationMeta = response.data.data?.registrationData || {}
           const requestData = {
             userId: response.data.data?.userId,
             email,
+            password,
             name: formData.name || '',
-            dob: formData.dob || '',
             city: formData.city || '',
-            doctorId: formData.doctorId || null
+            dob: formData.dob || '',
+            doctorId: formData.doctorId || null,
+            hospitalId: formData.hospitalId || registrationMeta.hospitalId || '',
+            insuranceId: formData.insuranceId || registrationMeta.insuranceId || '',
+            adminId: registrationMeta.adminId || null,
+            organization: registrationMeta.organization || registrationMeta.org || null
           }
-          // store in local registration queue for admin UI
-          submitRegistrationRequest(selectedRole, requestData)
+          submitRegistrationRequest(normalizedRole, requestData)
         } catch (err) {
           console.warn('Could not store local registration request:', err.message)
         }
 
-        setTimeout(() => {
+        if (!response.data.data?.userId) {
           navigate('/login', { state: { email, role: selectedRole } })
-        }, 10000)
+        }
       } else {
         toast.error(response.data.message || 'Registration failed')
       }
@@ -409,6 +437,43 @@ const Register = () => {
           </div>
         </div>
       </div>
+
+      {showUserIdModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Unique User ID</h2>
+            <p className="text-gray-600 mb-6">
+              Save this ID safely. You&apos;ll need it to complete blockchain onboarding and future logins.
+            </p>
+            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mb-6">
+              <p className="text-xs font-semibold text-gray-500 mb-2">USER ID</p>
+              <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100">
+                <span className="font-mono text-sm text-gray-800 break-all mr-4">{generatedUserId}</span>
+                <button
+                  onClick={handleCopyUserId}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-pink-500 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-pink-600 transition"
+                >
+                  {copiedUserId ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={handleGoToLogin}
+                className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-pink-500 text-white rounded-xl font-semibold hover:from-blue-600 hover:to-pink-600 transition shadow-lg hover:shadow-xl"
+              >
+                Go to Login
+              </button>
+              <button
+                onClick={handleCloseModal}
+                className="w-full px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition"
+              >
+                Stay on this page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

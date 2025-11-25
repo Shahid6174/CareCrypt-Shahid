@@ -1,5 +1,4 @@
-const githubModels = require('../config/azureOpenAI'); // now returns GitHub Models config
-const { isUnexpected } = require("@azure-rest/ai-inference");
+const llmGateway = require('../config/azureOpenAI');
 
 /**
  * Chatbot Service
@@ -25,16 +24,7 @@ Important guidelines:
 - Never provide actual medical advice or diagnoses
 - Always recommend consulting healthcare professionals for medical decisions
 - Respect patient privacy and confidentiality
-- Guide users to appropriate features within the system
-
-When users ask about:
-1. Claims: Explain the process, required documents, and fraud detection
-2. Documents: Guide on upload, formats, and categorization
-3. Fraud warnings: Explain the system, appeal process, and prevention
-4. Medical records: How to view, share, and manage access
-5. Insurance: Policy details, coverage, and claim status
-
-Always maintain a helpful, respectful tone and prioritize user safety and privacy.`;
+- Guide users to appropriate features within the system`;
 
     this.contextPrompts = {
       patient: `The user is a PATIENT. They can:
@@ -66,54 +56,137 @@ Always maintain a helpful, respectful tone and prioritize user safety and privac
 - Unblock users
 - Monitor system health`
     };
+
+    this.suggestionMap = {
+      patient: [
+        'How do I submit a claim?',
+        'What documents are required?',
+        'How do I check my fraud warnings?'
+      ],
+      doctor: [
+        'How do I add a medical record?',
+        'How do I verify a claim?',
+        'How do I view patient documents?'
+      ],
+      insuranceAgent: [
+        'Show me pending claims',
+        'How do I approve a claim?',
+        'How do I flag fraud?'
+      ],
+      admin: [
+        'Show pending approvals',
+        'How do I unblock a user?',
+        'Show me system stats'
+      ]
+    };
   }
 
-  /**
-   * Generate chatbot response using GitHub Models
-   */
-  async generateResponse(userRole, userMessage) {
-    const client = githubModels.getClient();
+  getQuickSuggestions(role = 'patient') {
+    return this.suggestionMap[role] || this.suggestionMap.patient;
+  }
 
-    if (!githubModels.isReady()) {
-      return "⚠️ AI service is not configured. Please try again later.";
-    }
+  analyzeIntent(message = '') {
+    const text = message.toLowerCase();
+    if (/claim|approve|status/.test(text)) return 'claim_submission';
+    if (/document|upload|file/.test(text)) return 'document_upload';
+    if (/fraud|warning|blocked/.test(text)) return 'fraud_help';
+    if (/access|permission|grant/.test(text)) return 'access_control';
+    return 'general';
+  }
 
-    const model = githubModels.getModel();
-
-    const messages = [
-      { role: "system", content: this.systemPrompt },
+  buildMessages(userRole, history, userMessage) {
+    const roleKey = this.contextPrompts[userRole] ? userRole : 'patient';
+    const baseMessages = [
+      { role: 'system', content: this.systemPrompt },
+      { role: 'system', content: this.contextPrompts[roleKey] }
     ];
 
-    if (this.contextPrompts[userRole]) {
-      messages.push({ role: "system", content: this.contextPrompts[userRole] });
+    const sanitizedHistory = Array.isArray(history)
+      ? history.slice(-8).map(msg => ({
+          role: msg.role === 'assistant' || msg.role === 'user' ? msg.role : 'user',
+          content: msg.content || ''
+        })).filter(msg => msg.content)
+      : [];
+
+    return [
+      ...baseMessages,
+      ...sanitizedHistory,
+      { role: 'user', content: userMessage }
+    ];
+  }
+
+  buildFallbackResponse(userMessage, userRole, isError = false) {
+    const defaultMessage = isError
+      ? '⚠️ I ran into an error processing that. Please try again in a moment.'
+      : '🤖 The AI assistant is unavailable right now. Please try again shortly.';
+
+    return {
+      message: defaultMessage,
+      timestamp: new Date().toISOString(),
+      tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      fallback: true,
+      suggestions: this.getQuickSuggestions(userRole)
+    };
+  }
+
+  async callModel(messages) {
+    const client = githubModels.getClient();
+    if (!githubModels.isReady()) {
+      throw new Error('GitHub Models client is not configured');
     }
 
-    messages.push({
-      role: "user",
-      content: userMessage
-    });
+    const response = await client
+      .path('/chat/completions')
+      .post({
+        body: {
+          model: githubModels.getModel(),
+          messages,
+          temperature: 0.7
+        }
+      });
 
+    if (isUnexpected(response)) {
+      const errorBody = JSON.stringify(response.body);
+      throw new Error(`GitHub Models responded unexpectedly: ${errorBody}`);
+    }
+
+    const choice = response.body.choices?.[0]?.message?.content;
+    return {
+      content: choice || 'I am sorry, but I do not have a response right now.',
+      usage: response.body.usage || {}
+    };
+  }
+
+  async callModel(messages) {
+    const response = await llmGateway.chatCompletion(messages, { temperature: 0.7 });
+    const choice = response?.choices?.[0]?.message?.content;
+    return {
+      content: choice || 'I am sorry, I do not have a response right now.',
+      usage: response?.usage || {}
+    };
+  }
+
+  async chat(userMessage, history = [], userRole = 'patient') {
     try {
-      const response = await client
-        .path("/chat/completions")
-        .post({
-          body: {
-            model: model,
-            messages: messages,
-            temperature: 0.7
-          }
-        });
-
-      if (isUnexpected(response)) {
-        console.error("GitHub Models Error Response:", response.body);
-        return "❌ Error communicating with AI model.";
+      if (!llmGateway.isReady()) {
+        throw new Error('LLM service is not configured');
       }
 
-      return response.body.choices[0].message.content;
-
+      const messages = this.buildMessages(userRole, history, userMessage);
+      const { content, usage } = await this.callModel(messages);
+      return {
+        message: content,
+        timestamp: new Date().toISOString(),
+        tokensUsed: {
+          prompt: usage.prompt_tokens || usage.promptTokens || 0,
+          completion: usage.completion_tokens || usage.completionTokens || 0,
+          total: usage.total_tokens || usage.totalTokens || 0
+        },
+        fallback: false
+      };
     } catch (error) {
-      console.error("❌ Chatbot error:", error);
-      return "❌ The AI assistant encountered an error.";
+      console.error('❌ Chatbot error:', error.message);
+      return this.buildFallbackResponse(userMessage, userRole, true);
     }
   }
 }

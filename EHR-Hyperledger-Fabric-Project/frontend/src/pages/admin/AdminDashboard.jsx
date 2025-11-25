@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
 import { 
   FiUsers, FiUserCheck, FiShield, FiCheckCircle, FiXCircle,
-  FiClock, FiActivity, FiPlus, FiDollarSign, FiAlertTriangle
+  FiClock, FiActivity, FiPlus, FiDollarSign, FiAlertTriangle, FiHeart
 } from 'react-icons/fi'
 import { getRegistrationRequests, approveRegistration, rejectRegistration } from '../../services/registrationService'
 import api from '../../services/api'
@@ -10,10 +10,26 @@ import { toast } from 'react-toastify'
 import { useAuth } from '../../contexts/AuthContext'
 import FraudManagement from '../../components/FraudManagement'
 
+const StatCard = ({ label, value, icon, color }) => (
+  <div className={`rounded-2xl border border-gray-100 p-4 shadow-sm bg-gradient-to-br ${color}`}>
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-xs text-gray-500 uppercase">{label}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+      </div>
+      <div className="p-3 bg-white/80 rounded-xl shadow-inner">
+        {icon}
+      </div>
+    </div>
+  </div>
+)
+
 const AdminDashboard = () => {
   const { user, loading: authLoading } = useAuth()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
+  const [analytics, setAnalytics] = useState(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('pending')
   const [mainTab, setMainTab] = useState('requests') // 'requests' or 'direct'
   const [showDoctorForm, setShowDoctorForm] = useState(false)
@@ -39,6 +55,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     loadRequests()
+    loadAnalytics()
   }, [])
 
   const loadRequests = async () => {
@@ -49,6 +66,23 @@ const AdminDashboard = () => {
       toast.error('Failed to load registration requests')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true)
+      const response = await api.get('/analytics/admin')
+      if (response.data?.success) {
+        setAnalytics(response.data.data)
+      } else {
+        setAnalytics(response.data || null)
+      }
+    } catch (error) {
+      console.error('Failed to load analytics:', error)
+      toast.error('Failed to load system analytics')
+    } finally {
+      setAnalyticsLoading(false)
     }
   }
 
@@ -92,14 +126,11 @@ const AdminDashboard = () => {
 
     try {
       setLoading(true)
-      // Set header for hospital admin
-      const hospitalId = doctorForm.hospitalId || user.userId
-      api.defaults.headers.common['x-userid'] = hospitalId
-      
+      const hospitalId = doctorForm.hospitalId || ''
       const response = await api.post('/auth/registerDoctor', {
-        adminId: doctorForm.adminId || hospitalId,
+        adminId: doctorForm.adminId || user.userId,
         doctorId: doctorForm.doctorId,
-        hospitalId: hospitalId,
+        hospitalId,
         name: doctorForm.name,
         city: doctorForm.city,
         email: doctorForm.email,
@@ -118,14 +149,10 @@ const AdminDashboard = () => {
           email: '',
           password: ''
         })
-        // Reset header
-        api.defaults.headers.common['x-userid'] = user.userId
       }
     } catch (error) {
       console.error('Error registering doctor:', error)
       toast.error(error.response?.data?.message || error.message || 'Failed to register doctor')
-      // Reset header
-      api.defaults.headers.common['x-userid'] = user.userId
     } finally {
       setLoading(false)
     }
@@ -140,14 +167,11 @@ const AdminDashboard = () => {
 
     try {
       setLoading(true)
-      // Set header for insurance admin
-      const insuranceId = agentForm.insuranceId
-      api.defaults.headers.common['x-userid'] = insuranceId
-      
+      const insuranceId = agentForm.insuranceId || ''
       const response = await api.post('/auth/registerInsuranceAgent', {
-        adminId: agentForm.adminId || insuranceId,
+        adminId: agentForm.adminId || user.userId,
         agentId: agentForm.agentId,
-        insuranceId: insuranceId,
+        insuranceId,
         name: agentForm.name,
         city: agentForm.city,
         email: agentForm.email,
@@ -167,13 +191,9 @@ const AdminDashboard = () => {
           password: ''
         })
       }
-      // Reset header
-      api.defaults.headers.common['x-userid'] = user.userId
     } catch (error) {
       console.error('Error registering agent:', error)
       toast.error(error.response?.data?.message || error.message || 'Failed to register insurance agent')
-      // Reset header
-      api.defaults.headers.common['x-userid'] = user.userId
     } finally {
       setLoading(false)
     }
@@ -220,6 +240,62 @@ const AdminDashboard = () => {
   return (
     <Layout title="Admin Dashboard" navItems={navItems}>
       <div className="space-y-6">
+        <section className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Real-time System Overview</h2>
+              <p className="text-sm text-gray-500">Totals are fetched directly from the backend database</p>
+            </div>
+            <button
+              onClick={loadAnalytics}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-semibold hover:from-purple-600 hover:to-indigo-600 transition disabled:opacity-50"
+              disabled={analyticsLoading}
+            >
+              {analyticsLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+
+          {analyticsLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-purple-500"></div>
+            </div>
+          ) : analytics ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <StatCard label="Total Users" value={analytics.overview?.totalUsers || 0} icon={<FiUsers className="w-6 h-6 text-blue-600" />} color="from-blue-50 to-blue-100" />
+                <StatCard label="Patients" value={analytics.overview?.patientCount || 0} icon={<FiHeart className="w-6 h-6 text-pink-600" />} color="from-pink-50 to-pink-100" />
+                <StatCard label="Doctors" value={analytics.overview?.doctorCount || 0} icon={<FiUserCheck className="w-6 h-6 text-blue-600" />} color="from-indigo-50 to-indigo-100" />
+                <StatCard label="Agents" value={analytics.overview?.agentCount || 0} icon={<FiDollarSign className="w-6 h-6 text-green-600" />} color="from-green-50 to-green-100" />
+                <StatCard label="Pending Approvals" value={analytics.overview?.pendingApprovals || 0} icon={<FiShield className="w-6 h-6 text-yellow-600" />} color="from-yellow-50 to-yellow-100" />
+                <StatCard label="Transactions" value={analytics.transactionMetrics?.totalTransactions || 0} icon={<FiActivity className="w-6 h-6 text-purple-600" />} color="from-purple-50 to-purple-100" />
+              </div>
+
+              {analytics.approvalMetrics?.pendingUsers?.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Approval Queue</h3>
+                  <div className="grid gap-3">
+                    {analytics.approvalMetrics.pendingUsers.map((pendingUser) => (
+                      <div key={pendingUser.userId} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl p-4">
+                        <div>
+                          <p className="font-semibold text-gray-900">{pendingUser.name || pendingUser.userId}</p>
+                          <p className="text-sm text-gray-500">
+                            {pendingUser.role} • Submitted {new Date(pendingUser.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                          Awaiting approval
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">Analytics data is unavailable right now.</p>
+          )}
+        </section>
+
         {/* Main Tabs */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100">
           <div className="border-b border-gray-200">

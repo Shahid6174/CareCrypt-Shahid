@@ -73,10 +73,9 @@ const PatientDashboard = () => {
   }
 
   useEffect(() => {
-    if (user && user.userId && !authLoading) {
-      loadData()
-      loadFraudStatus()
-    }
+    if (!user || !user.userId || authLoading || user.restricted) return
+    loadData()
+    loadFraudStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeTab, authLoading])
 

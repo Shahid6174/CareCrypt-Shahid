@@ -21,6 +21,15 @@ const Login = () => {
     { value: 'admin', label: 'System Admin', icon: <FiShield className="w-6 h-6" />, color: 'bg-purple-500' }
   ]
 
+  const rolePaths = {
+    patient: '/patient/dashboard',
+    doctor: '/doctor/dashboard',
+    insurance: '/insurance/dashboard',
+    hospitalAdmin: '/admin/dashboard',
+    insuranceAdmin: '/admin/dashboard',
+    admin: '/admin/dashboard'
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -35,6 +44,8 @@ const Login = () => {
       setLoading(false)
 
       if (result.success) {
+        const dashboardPath = result.data?.dashboardPath || rolePaths[selectedRole] || '/login'
+
         if (result.needsRegistration) {
           // User needs to register - redirect to registration
           toast.info('Please register first')
@@ -42,14 +53,19 @@ const Login = () => {
         } else if (result.needsChaincodeRegistration) {
           // User registered but needs admin to complete blockchain registration
           toast.warning(result.message || 'Your registration is pending. Please wait for admin approval.')
-          // Still allow login but show warning
-          if (result.userId) {
-            navigate(`/${selectedRole}/dashboard`)
+          if (result.pendingApproval) {
+            toast.info('Your account is waiting for admin approval. Features remain limited until approval is complete.')
           }
+          // Still allow login but show warning
+          navigate(dashboardPath)
         } else {
           // Successful login
-          toast.success(`Welcome back!`)
-          navigate(`/${selectedRole}/dashboard`)
+          if (result.pendingApproval) {
+            toast.info('Some features are disabled until your admin approves the account.')
+          } else {
+            toast.success(`Welcome back!`)
+          }
+          navigate(dashboardPath)
         }
       } else {
         toast.error(result.message || 'Login failed. Please check your credentials.')

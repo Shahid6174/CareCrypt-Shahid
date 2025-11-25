@@ -64,9 +64,8 @@ const InsuranceDashboard = () => {
   }
 
   useEffect(() => {
-    if (user && user.userId && !authLoading) {
-      loadData()
-    }
+    if (!user || !user.userId || authLoading || user.restricted) return
+    loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user, authLoading])
 

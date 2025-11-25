@@ -11,9 +11,38 @@ export const useAuth = () => {
   return context
 }
 
+const ROLE_DASHBOARD_MAP = {
+  admin: '/admin/dashboard',
+  hospitalAdmin: '/admin/dashboard',
+  insuranceAdmin: '/admin/dashboard',
+  patient: '/patient/dashboard',
+  doctor: '/doctor/dashboard',
+  insurance: '/insurance/dashboard',
+  insuranceAgent: '/insurance/dashboard'
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const buildUserData = (roleHint, payload = {}) => {
+    const normalizedRole = payload.role || roleHint
+    const registeredOnChain = Boolean(payload.registeredOnChain)
+    const approvalStatus = payload.approvalStatus || (registeredOnChain ? 'approved' : 'pending')
+    const restricted = payload.restricted ?? (approvalStatus !== 'approved' || !registeredOnChain)
+    const dashboardPath = ROLE_DASHBOARD_MAP[normalizedRole] || ROLE_DASHBOARD_MAP[roleHint] || '/login'
+
+    return {
+      userId: payload.userId,
+      role: normalizedRole,
+      name: payload.name,
+      registeredOnChain,
+      approvalStatus,
+      restricted,
+      dashboardPath,
+      ...payload
+    }
+  }
 
   useEffect(() => {
     // Check for stored user session
@@ -24,7 +53,8 @@ export const AuthProvider = ({ children }) => {
         
         if (storedUser && storedToken) {
           try {
-            const userData = JSON.parse(storedUser)
+            const parsedUser = JSON.parse(storedUser)
+            const userData = buildUserData(parsedUser.role, parsedUser)
             // Validate user data structure
             if (userData && userData.userId && userData.role) {
               setUser(userData)
@@ -90,13 +120,10 @@ export const AuthProvider = ({ children }) => {
 
       // Handle needsChaincodeRegistration response
       if (response.data.data?.needsChaincodeRegistration) {
-        const userData = {
-          userId: response.data.data.userId,
-          role,
-          name: response.data.data.name,
-          registeredOnChain: false,
-          ...response.data.data
-        }
+        const userData = buildUserData(role, {
+          ...response.data.data,
+          registeredOnChain: false
+        })
         
         setUser(userData)
         localStorage.setItem('user', JSON.stringify(userData))
@@ -107,19 +134,15 @@ export const AuthProvider = ({ children }) => {
           success: true,
           needsChaincodeRegistration: true,
           userId: userData.userId,
-          message: response.data.data.message || 'Registration pending admin approval'
+          message: response.data.data.message || 'Registration pending admin approval',
+          data: userData,
+          pendingApproval: true
         }
       }
 
       // Successful login
       if (response.data.success && response.data.data) {
-        const userData = {
-          userId: response.data.data.userId,
-          role,
-          name: response.data.data.name,
-          registeredOnChain: response.data.data.registeredOnChain || false,
-          ...response.data.data
-        }
+        const userData = buildUserData(role, response.data.data)
         
         setUser(userData)
         localStorage.setItem('user', JSON.stringify(userData))
@@ -128,7 +151,8 @@ export const AuthProvider = ({ children }) => {
         
         return { 
           success: true, 
-          data: userData 
+          data: userData,
+          pendingApproval: userData.approvalStatus !== 'approved'
         }
       }
       

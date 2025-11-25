@@ -1,9 +1,30 @@
 import api from './api'
 
-// Store registration requests locally (in a real app, this would be a backend endpoint)
-const registrationRequests = JSON.parse(localStorage.getItem('registrationRequests') || '[]')
+const STORAGE_KEY = 'registrationRequests'
 
-export const submitRegistrationRequest = (role, data) => {
+const readRequests = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+  } catch (error) {
+    console.warn('Unable to read registration requests:', error)
+    return []
+  }
+}
+
+const writeRequests = (requests) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(requests))
+}
+
+const updateRequestStatus = (requests, requestId, updater) => {
+  const updatedRequests = requests.map((req) =>
+    req.id === requestId ? { ...req, ...updater(req) } : req
+  )
+  writeRequests(updatedRequests)
+  return updatedRequests
+}
+
+export const submitRegistrationRequest = (role, data = {}) => {
+  const requests = readRequests()
   const request = {
     id: Date.now().toString(),
     role,
@@ -11,141 +32,137 @@ export const submitRegistrationRequest = (role, data) => {
     status: 'pending',
     createdAt: new Date().toISOString()
   }
-  
-  registrationRequests.push(request)
-  localStorage.setItem('registrationRequests', JSON.stringify(registrationRequests))
-  
+
+  requests.push(request)
+  writeRequests(requests)
+
   return Promise.resolve({ success: true, data: request })
 }
 
 export const getRegistrationRequests = () => {
-  return Promise.resolve({ success: true, data: registrationRequests })
+  return Promise.resolve({ success: true, data: readRequests() })
+}
+
+const completeSelfRegistration = async (request, adminId) => {
+  if (!request.data?.userId) {
+    throw new Error('Missing userId for approval')
+  }
+  const normalizedRole = request.role === 'insuranceAgent' ? 'insurance' : request.role
+  const effectiveAdminId = request.data?.adminId || adminId
+  let response
+  const originalHeader = api.defaults.headers.common['x-userid']
+  api.defaults.headers.common['x-userid'] = effectiveAdminId
+
+  try {
+    switch (normalizedRole) {
+      case 'patient':
+        response = await api.post('/auth/completePatientRegistration', {
+          userId: request.data.userId,
+          adminId: effectiveAdminId
+        })
+        break
+      case 'doctor':
+        response = await api.post('/auth/completeDoctorRegistration', {
+          userId: request.data.userId,
+          adminId: effectiveAdminId
+        })
+        break
+      case 'insurance':
+        response = await api.post('/auth/completeInsuranceAgentRegistration', {
+          userId: request.data.userId,
+          adminId: effectiveAdminId
+        })
+        break
+      default:
+        response = null
+        break
+    }
+  } finally {
+    if (originalHeader === undefined) {
+      delete api.defaults.headers.common['x-userid']
+    } else {
+      api.defaults.headers.common['x-userid'] = originalHeader
+    }
+  }
+
+  return response
+}
+
+const legacyRegisterAndComplete = async (request, adminId) => {
+  let endpoint = ''
+  let payload = {}
+
+  switch (request.role) {
+    case 'hospital':
+      endpoint = '/auth/registerHospitalAdmin'
+      payload = {
+        adminId,
+        userId: request.data.userId,
+        hospitalId: request.data.hospitalId,
+        name: request.data.name,
+        address: request.data.address
+      }
+      break
+    case 'insuranceAdmin':
+      endpoint = '/auth/registerInsuranceAdmin'
+      payload = {
+        adminId,
+        userId: request.data.userId,
+        email: request.data.email,
+        password: request.data.password,
+        insuranceId: request.data.insuranceId,
+        name: request.data.name,
+        address: request.data.address
+      }
+      break
+    default:
+      throw new Error('Invalid role')
+  }
+
+  return await api.post(endpoint, payload)
 }
 
 export const approveRegistration = async (requestId, adminId) => {
-  const requests = JSON.parse(localStorage.getItem('registrationRequests') || '[]')
-  const request = requests.find(r => r.id === requestId)
-  
+  const requests = readRequests()
+  const request = requests.find((r) => r.id === requestId)
+
   if (!request) {
     throw new Error('Registration request not found')
   }
 
+  const normalizedRole = request.role === 'insuranceAgent' ? 'insurance' : request.role
+
   try {
-    let endpoint = ''
-    let payload = {}
-    
-    switch (request.role) {
-      case 'patient':
-        endpoint = '/auth/registerPatient'
-        payload = {
-          adminId,
-          doctorId: request.data.doctorId,
-          userId: request.data.userId,
-          email: request.data.email,
-          password: request.data.password,
-          name: request.data.name,
-          dob: request.data.dob,
-          city: request.data.city
-        }
-        break
-      case 'doctor':
-        endpoint = '/auth/registerDoctor'
-        payload = {
-          adminId,
-          doctorId: request.data.doctorId,
-          email: request.data.email,
-          password: request.data.password,
-          hospitalId: request.data.hospitalId,
-          name: request.data.name,
-          city: request.data.city
-        }
-        // Set header for hospital admin
-        api.defaults.headers.common['x-userid'] = request.data.hospitalId
-        break
-      case 'hospital':
-        endpoint = '/auth/registerHospitalAdmin'
-        payload = {
-          adminId,
-          userId: request.data.userId,
-          hospitalId: request.data.hospitalId,
-          name: request.data.name,
-          address: request.data.address
-        }
-        api.defaults.headers.common['x-userid'] = adminId
-        break
-      case 'insurance':
-        endpoint = '/auth/registerInsuranceAdmin'
-        payload = {
-          adminId,
-          userId: request.data.userId,
-          email: request.data.email,
-          password: request.data.password,
-          insuranceId: request.data.insuranceId,
-          name: request.data.name,
-          address: request.data.address
-        }
-        break
-      default:
-        throw new Error('Invalid role')
+    let response
+
+    if (['patient', 'doctor', 'insurance'].includes(normalizedRole)) {
+      response = await completeSelfRegistration(request, adminId)
+    } else {
+      response = await legacyRegisterAndComplete(request, adminId)
     }
 
-    const response = await api.post(endpoint, payload)
-    // After creating the user in MongoDB, trigger blockchain registration (complete registration)
-    let createdUserId = response?.data?.data?.userId || payload.userId || request.data.userId || request.data.userId
+    updateRequestStatus(requests, requestId, () => ({
+      status: 'approved',
+      approvedAt: new Date().toISOString(),
+      error: undefined
+    }))
 
-    try {
-      switch (request.role) {
-        case 'patient':
-          // complete patient registration (no requireUser middleware)
-          await api.post('/auth/completePatientRegistration', { userId: createdUserId, adminId })
-          break
-        case 'doctor':
-          // complete doctor registration; ensure header set to admin/hospital id
-          api.defaults.headers.common['x-userid'] = request.data.hospitalId || adminId
-          await api.post('/auth/completeDoctorRegistration', { userId: createdUserId, adminId: adminId })
-          break
-        case 'insurance':
-          // complete insurance agent registration; ensure header set to insurance admin
-          api.defaults.headers.common['x-userid'] = adminId
-          await api.post('/auth/completeInsuranceAgentRegistration', { userId: createdUserId, adminId: adminId })
-          break
-        default:
-          break
-      }
-    } catch (completeErr) {
-      // If chain registration failed, mark request as failed and persist
-      const failedRequests = requests.map(r =>
-        r.id === requestId ? { ...r, status: 'failed', error: completeErr.message } : r
-      )
-      localStorage.setItem('registrationRequests', JSON.stringify(failedRequests))
-      throw completeErr
-    }
-    
-    // Update request status
-    const updatedRequests = requests.map(r => 
-      r.id === requestId ? { ...r, status: 'approved', approvedAt: new Date().toISOString() } : r
-    )
-    localStorage.setItem('registrationRequests', JSON.stringify(updatedRequests))
-    
-    return { success: true, data: response.data }
+    return { success: true, data: response?.data || null }
   } catch (error) {
-    // Update request status to failed
-    const updatedRequests = requests.map(r => 
-      r.id === requestId ? { ...r, status: 'failed', error: error.message } : r
-    )
-    localStorage.setItem('registrationRequests', JSON.stringify(updatedRequests))
-    
+    updateRequestStatus(requests, requestId, () => ({
+      status: 'failed',
+      error: error.message
+    }))
     throw error
   }
 }
 
 export const rejectRegistration = (requestId) => {
-  const requests = JSON.parse(localStorage.getItem('registrationRequests') || '[]')
-  const updatedRequests = requests.map(r => 
-    r.id === requestId ? { ...r, status: 'rejected', rejectedAt: new Date().toISOString() } : r
-  )
-  localStorage.setItem('registrationRequests', JSON.stringify(updatedRequests))
-  
+  const requests = readRequests()
+  updateRequestStatus(requests, requestId, () => ({
+    status: 'rejected',
+    rejectedAt: new Date().toISOString()
+  }))
+
   return Promise.resolve({ success: true })
 }
-

@@ -2,6 +2,16 @@ import React from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+const roleMap = {
+  admin: '/admin/dashboard',
+  hospitalAdmin: '/admin/dashboard',
+  insuranceAdmin: '/admin/dashboard',
+  patient: '/patient/dashboard',
+  doctor: '/doctor/dashboard',
+  insurance: '/insurance/dashboard',
+  insuranceAgent: '/insurance/dashboard'
+}
+
 const ProtectedRoute = ({ children, role }) => {
   const { user, loading } = useAuth()
 
@@ -17,15 +27,9 @@ const ProtectedRoute = ({ children, role }) => {
     return <Navigate to="/login" replace />
   }
 
-  if (role && user.role !== role) {
-    // Redirect to correct dashboard based on user's actual role
-    const roleMap = {
-      'admin': '/admin/dashboard',
-      'patient': '/patient/dashboard',
-      'doctor': '/doctor/dashboard',
-      'insurance': '/insurance/dashboard'
-    }
-    const correctPath = roleMap[user.role] || '/login'
+  const allowedRoles = role ? (Array.isArray(role) ? role : [role]) : null
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    const correctPath = user.dashboardPath || roleMap[user.role] || '/login'
     return <Navigate to={correctPath} replace />
   }
 

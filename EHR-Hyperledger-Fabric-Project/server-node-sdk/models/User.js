@@ -43,6 +43,32 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+  approvalNotes: {
+    type: String,
+    default: ''
+  },
+  approvedAt: Date,
+  approvalHistory: {
+    type: [{
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected']
+      },
+      notes: String,
+      changedBy: String,
+      changedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    default: []
+  },
   // Additional metadata
   metadata: {
     type: mongoose.Schema.Types.Mixed,

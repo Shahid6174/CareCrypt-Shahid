@@ -134,6 +134,19 @@ class AnalyticsService {
     const patientCount = await User.countDocuments({ role: 'patient' });
     const doctorCount = await User.countDocuments({ role: 'doctor' });
     const agentCount = await User.countDocuments({ role: 'insuranceAgent' });
+    const onChainUsers = await User.countDocuments({ registeredOnChain: true });
+    
+    const approvalAggregation = await User.aggregate([
+      { $group: { _id: '$approvalStatus', total: { $sum: 1 } } }
+    ]);
+    const approvalMap = approvalAggregation.reduce((acc, bucket) => {
+      const key = bucket?._id || 'pending';
+      acc[key] = bucket.total;
+      return acc;
+    }, {});
+    const pendingApprovals = approvalMap.pending || 0;
+    const approvedUsers = approvalMap.approved || 0;
+    const rejectedApprovals = approvalMap.rejected || 0;
     
     const blockedUsers = await User.countDocuments({ 'fraudDetection.isBlocked': true });
     const fraudAttempts = await User.countDocuments({ 'fraudDetection.attemptCount': { $gt: 0 } });
@@ -154,13 +167,29 @@ class AnalyticsService {
       .limit(5)
       .select('userId name role rewards.totalCoins rewards.badge');
     
+    const transactionTypes = ['claim_submitted', 'claim_approved', 'claim_rejected', 'claim_verified'];
+    const now = new Date();
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const totalTransactions = await Notification.countDocuments({ type: { $in: transactionTypes } });
+    const transactions24h = await Notification.countDocuments({
+      type: { $in: transactionTypes },
+      createdAt: { $gte: last24Hours }
+    });
+    
+    const pendingUsers = await User.find({ approvalStatus: 'pending' })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('userId name role email createdAt city hospitalId insuranceId');
+    
     return {
       overview: {
         totalUsers,
         patientCount,
         doctorCount,
         agentCount,
-        recentRegistrations
+        recentRegistrations,
+        pendingApprovals,
+        onChainUsers
       },
       fraudMetrics: {
         blockedUsers,
@@ -183,6 +212,17 @@ class AnalyticsService {
           coins: u.rewards?.totalCoins || 0,
           badge: u.rewards?.badge || 'Beginner'
         }))
+      },
+      approvalMetrics: {
+        pending: pendingApprovals,
+        approved: approvedUsers,
+        rejected: rejectedApprovals,
+        pendingUsers
+      },
+      transactionMetrics: {
+        totalTransactions,
+        transactions24h,
+        registeredOnChain: onChainUsers
       },
       systemMetrics: {
         databaseSize: 'N/A', // Would need system query

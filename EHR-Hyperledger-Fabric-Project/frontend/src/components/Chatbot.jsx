@@ -3,8 +3,10 @@ import { FiMessageSquare, FiX, FiSend, FiMinimize2, FiMaximize2 } from 'react-ic
 import { BsRobot } from 'react-icons/bs';
 import api from '../services/api';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 
 const Chatbot = () => {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -45,6 +47,10 @@ const Chatbot = () => {
 
   // Handle opening chatbot
   const handleOpen = () => {
+    if (!user) {
+      toast.info('Please log in to chat with the assistant.')
+      return
+    }
     setIsOpen(true);
     if (!sessionId) {
       startConversation();
