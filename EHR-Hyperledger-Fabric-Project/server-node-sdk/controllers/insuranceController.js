@@ -162,3 +162,23 @@ exports.getAgentProfile = async (req,res,next) => {
     res.status(200).send(responses.ok(profile));
   } catch(err){ next(err); }
 };
+
+exports.getAssignedClaims = async (req,res,next) => {
+  try{
+    const userId = req.user.id;
+    const result = await query.getQuery('getClaimsByAgent', { agentId: userId }, userId);
+    // Parse the JSON string result to return as array
+    let claims = [];
+    try {
+      claims = JSON.parse(result);
+      // Ensure claims is an array
+      if (!Array.isArray(claims)) {
+        claims = [];
+      }
+    } catch (parseError) {
+      console.error('Error parsing claims:', parseError);
+      claims = [];
+    }
+    res.status(200).send(responses.ok(claims));
+  } catch(err){ next(err); }
+};

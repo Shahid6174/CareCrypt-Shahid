@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
 import { 
   FiFileText, FiUser, FiCheckCircle, FiXCircle, FiEye,
-  FiDollarSign, FiClock
+  FiDollarSign, FiClock, FiFile, FiPaperclip
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -82,11 +82,17 @@ const InsuranceDashboard = () => {
     
     try {
       setLoading(true)
-      const response = await api.get('/claims/byStatus', {
-        params: { status: 'pending' }
-      })
+      // Fetch claims assigned to this insurance agent
+      const response = await api.get('/insurance/claims/assigned')
       const claimsData = response.data?.data || response.data || []
-      setClaims(Array.isArray(claimsData) ? claimsData : [])
+      // Filter to show only claims pending review or approval
+      const filteredClaims = Array.isArray(claimsData) 
+        ? claimsData.filter(c => 
+            c.status === 'PENDING_INSURANCE_REVIEW' || 
+            c.status === 'PENDING_INSURANCE_APPROVAL'
+          )
+        : []
+      setClaims(filteredClaims)
     } catch (error) {
       console.error('Error loading claims:', error)
       toast.error(error.response?.data?.message || 'Failed to load claims')
@@ -244,11 +250,26 @@ const InsuranceDashboard = () => {
                       <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-green-300">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-4">
+                            <div className="flex items-center space-x-3 mb-4 flex-wrap">
                               <span className="font-bold text-gray-900 text-lg">{claim.claimId || `Claim #${idx + 1}`}</span>
                               <span className="px-4 py-1.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
                                 {claim.status || 'pending'}
                               </span>
+                              {claim.doctorVerified && (
+                                <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                                  Doctor Verified
+                                </span>
+                              )}
+                              {claim.genuineScore && (
+                                <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center space-x-1 ${
+                                  claim.genuineScore >= 75 ? 'bg-green-100 text-green-700' :
+                                  claim.genuineScore >= 55 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  <FiCheckCircle className="w-3 h-3" />
+                                  <span>AI Score: {claim.genuineScore?.toFixed(1)}%</span>
+                                </span>
+                              )}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                               <div>
@@ -268,8 +289,49 @@ const InsuranceDashboard = () => {
                                 <p className="font-semibold text-gray-900">{claim.hospitalId || '-'}</p>
                               </div>
                             </div>
+                            
                             {claim.description && (
-                              <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{claim.description}</p>
+                              <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mb-3">{claim.description}</p>
+                            )}
+
+                            {/* Doctor Notes */}
+                            {claim.doctorNotes && (
+                              <div className="bg-blue-50 rounded-lg p-3 mb-3 border border-blue-200">
+                                <p className="text-xs font-semibold text-blue-700 mb-1">Doctor's Notes:</p>
+                                <p className="text-sm text-blue-800">{claim.doctorNotes}</p>
+                              </div>
+                            )}
+                            
+                            {/* Documents Section */}
+                            {claim.documents && claim.documents.length > 0 && (
+                              <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                                <div className="flex items-center mb-3">
+                                  <FiPaperclip className="w-5 h-5 text-green-600 mr-2" />
+                                  <span className="font-semibold text-green-800">Attached Documents ({claim.documents.length})</span>
+                                </div>
+                                <div className="grid gap-2">
+                                  {claim.documents.map((doc, docIdx) => (
+                                    <div key={docIdx} className="flex items-center bg-white rounded-lg p-3 border border-green-100">
+                                      <FiFile className="w-4 h-4 text-green-500 mr-3" />
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-gray-800">{doc.fileName || `Document ${docIdx + 1}`}</p>
+                                        <p className="text-xs text-gray-500">
+                                          {doc.fileType || 'Unknown'} 
+                                          {doc.fileSize && ` • ${(doc.fileSize / 1024).toFixed(1)} KB`}
+                                          {doc.uploadedAt && ` • ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {(!claim.documents || claim.documents.length === 0) && (
+                              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-center">
+                                <FiFile className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">No documents attached to this claim</p>
+                              </div>
                             )}
                           </div>
                           <div className="flex flex-col space-y-2 ml-4">
@@ -311,13 +373,41 @@ const InsuranceDashboard = () => {
                   <div className="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100 shadow-lg">
                     <h3 className="text-xl font-bold text-gray-900 mb-6">Claim Details: {selectedClaim}</h3>
                     <div className="grid grid-cols-2 gap-6 mb-6">
-                      {Object.entries(claimDetails).map(([key, value]) => (
+                      {Object.entries(claimDetails).filter(([key]) => key !== 'documents' && key !== 'history').map(([key, value]) => (
                         <div key={key} className="bg-white p-4 rounded-xl shadow-sm">
                           <p className="text-sm text-gray-500 capitalize font-medium">{key.replace(/([A-Z])/g, ' $1')}</p>
-                          <p className="text-lg font-bold text-gray-900 mt-1">{value || '-'}</p>
+                          <p className="text-lg font-bold text-gray-900 mt-1">
+                            {typeof value === 'object' ? JSON.stringify(value) : (value || '-')}
+                          </p>
                         </div>
                       ))}
                     </div>
+
+                    {/* Documents in Claim Details */}
+                    {claimDetails.documents && claimDetails.documents.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="font-bold text-lg mb-4 flex items-center">
+                          <FiPaperclip className="w-5 h-5 mr-2 text-blue-600" />
+                          Attached Documents ({claimDetails.documents.length})
+                        </h4>
+                        <div className="grid gap-3">
+                          {claimDetails.documents.map((doc, idx) => (
+                            <div key={idx} className="bg-white rounded-xl p-4 border-2 border-blue-200 flex items-center">
+                              <FiFile className="w-5 h-5 text-blue-500 mr-3" />
+                              <div>
+                                <p className="text-sm font-semibold">{doc.fileName || `Document ${idx + 1}`}</p>
+                                <p className="text-xs text-gray-500">
+                                  {doc.fileType || 'Unknown'} 
+                                  {doc.fileSize && ` • ${(doc.fileSize / 1024).toFixed(1)} KB`}
+                                  {doc.uploadedAt && ` • ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {claimRecords.length > 0 && (
                       <div>
                         <h4 className="font-bold text-lg mb-4">Related Medical Records</h4>

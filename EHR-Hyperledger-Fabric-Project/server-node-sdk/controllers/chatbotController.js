@@ -14,17 +14,37 @@ const { v4: uuidv4 } = require('uuid');
  */
 exports.startConversation = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      console.error('Chatbot: No userId in request');
+      return res.status(400).send(responses.error('User ID is required'));
+    }
+    
+    console.log('Chatbot: Starting conversation for userId:', userId);
     
     // Get user to determine role
     let user = await User.findOne({ userId });
-    // Allow env-configured admin (local/testing) to start conversation even if not in MongoDB
-    const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
+    
+    // Allow env-configured admins (local/testing) to start conversation even if not in MongoDB
+    const ADMIN_USERID = process.env.ADMIN_USERID || 'systemAdmin';
+    const HOSPITAL_ADMIN_USERID = process.env.HOSPITAL_ADMIN_USERID || 'hospitalAdmin';
+    const INSURANCE_ADMIN_USERID = process.env.INSURANCE_ADMIN_USERID || 'insuranceAdmin';
+    
+    console.log('Chatbot: User from MongoDB:', user ? 'found' : 'not found');
+    console.log('Chatbot: Checking admin IDs - ADMIN:', ADMIN_USERID, 'HOSPITAL:', HOSPITAL_ADMIN_USERID, 'INSURANCE:', INSURANCE_ADMIN_USERID);
+    
     if (!user) {
-      if (userId === ADMIN_USERID) {
-        user = { role: 'admin', name: 'System Admin', userId: ADMIN_USERID };
+      // Check if this is an admin user (not in MongoDB but allowed)
+      if (userId === ADMIN_USERID || userId === HOSPITAL_ADMIN_USERID) {
+        user = { role: 'admin', name: 'Hospital Admin', userId: userId };
+        console.log('Chatbot: Using hospital admin fallback');
+      } else if (userId === INSURANCE_ADMIN_USERID) {
+        user = { role: 'admin', name: 'Insurance Admin', userId: userId };
+        console.log('Chatbot: Using insurance admin fallback');
       } else {
-        return res.status(404).send(responses.error('User not found'));
+        console.error('Chatbot: User not found and not an admin:', userId);
+        return res.status(404).send(responses.error(`User "${userId}" not found. Please register first.`));
       }
     }
 
@@ -45,6 +65,7 @@ exports.startConversation = async (req, res, next) => {
     conversation.addMessage('assistant', welcomeMessage, { fallback: true });
 
     await conversation.save();
+    console.log('Chatbot: Conversation created successfully for', userId);
 
     res.status(200).send(responses.ok({
       sessionId,
@@ -52,6 +73,7 @@ exports.startConversation = async (req, res, next) => {
       suggestions: chatbotService.getQuickSuggestions(user.role)
     }));
   } catch (err) {
+    console.error('Chatbot startConversation error:', err.message, err.stack);
     next(err);
   }
 };
@@ -201,8 +223,15 @@ exports.getSuggestions = async (req, res, next) => {
     
     let user = await User.findOne({ userId });
     const ADMIN_USERID = process.env.ADMIN_USERID || 'hospitalAdmin';
-    if (!user && userId === ADMIN_USERID) {
-      user = { role: 'admin', name: 'System Admin', userId: ADMIN_USERID };
+    const HOSPITAL_ADMIN_USERID = process.env.HOSPITAL_ADMIN_USERID || 'hospitalAdmin';
+    const INSURANCE_ADMIN_USERID = process.env.INSURANCE_ADMIN_USERID || 'insuranceAdmin';
+    
+    if (!user) {
+      if (userId === ADMIN_USERID || userId === HOSPITAL_ADMIN_USERID) {
+        user = { role: 'admin', name: 'Hospital Admin', userId: userId };
+      } else if (userId === INSURANCE_ADMIN_USERID) {
+        user = { role: 'admin', name: 'Insurance Admin', userId: userId };
+      }
     }
     if (!user) return res.status(404).send(responses.error('User not found'));
 

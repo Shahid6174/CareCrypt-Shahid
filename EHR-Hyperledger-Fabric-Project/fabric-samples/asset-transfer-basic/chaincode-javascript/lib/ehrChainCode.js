@@ -246,6 +246,34 @@ class ehrChainCode extends Contract {
     claim.updatedAt = updatedAt;
     claim.history = claim.history || [];
     claim.history.push({ at: updatedAt, by: doctorId, action: verified ? 'DOCTOR_APPROVED' : 'DOCTOR_REJECTED', notes: notes||'' });
+    
+    // If verified, randomly assign an insurance agent
+    if(verified) {
+      try {
+        const agentsIter = await ctx.stub.getStateByRange('agent-','agent-~');
+        const agents = [];
+        let agentRes = await agentsIter.next();
+        while (!agentRes.done) {
+          if (agentRes.value) {
+            try { agents.push(JSON.parse(agentRes.value.value.toString('utf8'))); } catch(e) {}
+          }
+          agentRes = await agentsIter.next();
+        }
+        await agentsIter.close();
+        
+        // Randomly select an agent if any exist
+        if(agents.length > 0) {
+          const randomIndex = Math.floor(Math.random() * agents.length);
+          const selectedAgent = agents[randomIndex];
+          claim.assignedAgentId = selectedAgent.agentId;
+          claim.history.push({ at: updatedAt, by: 'SYSTEM', action: 'AGENT_ASSIGNED', notes: `Assigned to agent ${selectedAgent.agentId}` });
+        }
+      } catch(e) {
+        console.log('Error assigning agent:', e.message);
+        // Continue without assigning agent if there's an error
+      }
+    }
+    
     await ctx.stub.putState(claimKey, Buffer.from(JSON.stringify(claim))); return JSON.stringify({ message: 'Doctor verification recorded', claim });
   }
 
@@ -304,20 +332,56 @@ class ehrChainCode extends Contract {
   }
 
   async getClaimsByStatus(ctx,args){
-    const { status } = JSON.parse(args); const iter = await ctx.stub.getStateByRange('claim-','claim-~'); const results = [];
-    for await(const r of iter){ try{ const v = JSON.parse(r.value.value.toString('utf8')); if(v.status === status) results.push(v); }catch(e){} } return stringify(results);
+    const { status } = JSON.parse(args);
+    const iter = await ctx.stub.getStateByRange('claim-','claim-~');
+    const results = [];
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try {
+            const v = JSON.parse(res.value.value.toString('utf8'));
+            if(v.status === status) results.push(v);
+          } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
+    return stringify(results);
   }
 async getAllHospitals(ctx,args){
     const iter = await ctx.stub.getStateByRange('hospital-','hospital-~');
     const results = [];
-    for await(const r of iter){ try{ results.push(JSON.parse(r.value.value.toString('utf8'))); }catch(e){} }
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try { results.push(JSON.parse(res.value.value.toString('utf8'))); } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
     return stringify(results);
   }
 
   async getAllDoctors(ctx,args){
     const iter = await ctx.stub.getStateByRange('doctor-','doctor-~');
     const results = [];
-    for await(const r of iter){ try{ results.push(JSON.parse(r.value.value.toString('utf8'))); }catch(e){} }
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try { results.push(JSON.parse(res.value.value.toString('utf8'))); } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
     return stringify(results);
   }
 
@@ -355,14 +419,34 @@ async getAllHospitals(ctx,args){
   async getAllPatients(ctx,args){
     const iter = await ctx.stub.getStateByRange('patient-','patient-~');
     const results = [];
-    for await(const r of iter){ try{ results.push(JSON.parse(r.value.value.toString('utf8'))); }catch(e){} }
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try { results.push(JSON.parse(res.value.value.toString('utf8'))); } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
     return stringify(results);
   }
 
   async getAllAgents(ctx,args){
     const iter = await ctx.stub.getStateByRange('agent-','agent-~');
     const results = [];
-    for await(const r of iter){ try{ results.push(JSON.parse(r.value.value.toString('utf8'))); }catch(e){} }
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try { results.push(JSON.parse(res.value.value.toString('utf8'))); } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
     return stringify(results);
   }
 
@@ -451,11 +535,19 @@ async getAllHospitals(ctx,args){
     const { doctorId } = JSON.parse(args);
     const iter = await ctx.stub.getStateByRange('claim-','claim-~');
     const results = [];
-    for await(const r of iter){
-      try{
-        const v = JSON.parse(r.value.value.toString('utf8'));
-        if(v.doctorId === doctorId) results.push(v);
-      }catch(e){}
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try {
+            const v = JSON.parse(res.value.value.toString('utf8'));
+            if(v.doctorId === doctorId) results.push(v);
+          } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
     }
     return stringify(results);
   }
@@ -464,11 +556,40 @@ async getAllHospitals(ctx,args){
     const { hospitalId } = JSON.parse(args);
     const iter = await ctx.stub.getStateByRange('claim-','claim-~');
     const results = [];
-    for await(const r of iter){
-      try{
-        const v = JSON.parse(r.value.value.toString('utf8'));
-        if(v.hospitalId === hospitalId) results.push(v);
-      }catch(e){}
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try {
+            const v = JSON.parse(res.value.value.toString('utf8'));
+            if(v.hospitalId === hospitalId) results.push(v);
+          } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
+    return stringify(results);
+  }
+
+  async getClaimsByAgent(ctx,args){
+    const { agentId } = JSON.parse(args);
+    const iter = await ctx.stub.getStateByRange('claim-','claim-~');
+    const results = [];
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try {
+            const v = JSON.parse(res.value.value.toString('utf8'));
+            if(v.assignedAgentId === agentId || v.agentId === agentId || v.insuranceAgentId === agentId) results.push(v);
+          } catch(e) {}
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
     }
     return stringify(results);
   }
@@ -538,8 +659,22 @@ async getAllHospitals(ctx,args){
   }
 
   async queryByCouch(ctx,args){
-    const { query } = JSON.parse(args); if(!query) throw new Error('Query required'); const iter = await ctx.stub.getQueryResult(query); const results = [];
-    for await(const r of iter){ try{ results.push(JSON.parse(r.value.toString('utf8'))); }catch(e){ results.push(r.value.toString('utf8')); } } return stringify(results);
+    const { query } = JSON.parse(args);
+    if(!query) throw new Error('Query required');
+    const iter = await ctx.stub.getQueryResult(query);
+    const results = [];
+    try {
+      let res = await iter.next();
+      while (!res.done) {
+        if (res.value) {
+          try { results.push(JSON.parse(res.value.value.toString('utf8'))); } catch(e) { results.push(res.value.value.toString('utf8')); }
+        }
+        res = await iter.next();
+      }
+    } finally {
+      await iter.close();
+    }
+    return stringify(results);
   }
 }
 

@@ -216,7 +216,7 @@ const Register = () => {
                 required
               />
             </div>
-            <div>
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Doctor ID (Optional)</label>
               <input
                 type="text"
@@ -225,7 +225,7 @@ const Register = () => {
                 placeholder="doctor01"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
-            </div>
+            </div> */}
           </>
         )
 

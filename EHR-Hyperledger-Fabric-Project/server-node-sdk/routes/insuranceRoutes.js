@@ -9,5 +9,6 @@ router.post('/claim/reject', requireUser, ins.rejectClaim);
 router.get('/claim/:claimId', requireUser, ins.getClaim);
 router.get('/claim/:claimId/records', requireUser, ins.getClaimRecords);
 router.get('/agent/:agentId/profile', requireUser, ins.getAgentProfile);
+router.get('/claims/assigned', requireUser, ins.getAssignedClaims);
 
 module.exports = router;

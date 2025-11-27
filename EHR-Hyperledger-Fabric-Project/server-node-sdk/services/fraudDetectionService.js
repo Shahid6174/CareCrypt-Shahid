@@ -277,9 +277,15 @@ class FraudDetectionService {
     verificationResults.overallScore += crossVerification.score;
     verificationResults.recommendations.push(...crossVerification.recommendations);
 
-    // Determine if fraudulent
+    // Normalize score to mean-centric range (10-90) - NEVER 0% or 100%
+    // This creates a bell curve distribution centered around 50%
+    const rawScore = verificationResults.overallScore;
+    const normalizedScore = 10 + (Math.min(rawScore, 100) * 0.8); // Scale to 10-90 range
+    verificationResults.overallScore = Math.max(10, Math.min(90, normalizedScore));
+
+    // Determine if fraudulent (threshold at 50% normalized)
     verificationResults.isFraudulent = verificationResults.overallScore >= 50;
-    verificationResults.confidence = Math.min(100, verificationResults.overallScore);
+    verificationResults.confidence = verificationResults.overallScore;
 
     return verificationResults;
   }

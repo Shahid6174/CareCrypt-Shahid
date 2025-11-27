@@ -19,6 +19,13 @@ exports.submitClaim = async (req,res,next) => {
       ));
     }
 
+    // Validate that documents are provided (COMPULSORY)
+    if (!req.body.documentIds || req.body.documentIds.length === 0) {
+      return res.status(400).send(responses.error(
+        'Medical documents are required for claim submission. Please attach at least one document.'
+      ));
+    }
+
     // Get fraud status for user
     const fraudStatus = await fraudDetectionService.getUserFraudStatus(userId);
 
@@ -35,21 +42,25 @@ exports.submitClaim = async (req,res,next) => {
       documents: req.body.documents || []
     };
 
-    // Perform fraud detection if documents are provided
+    // Perform fraud detection with documents
     let verificationResults = null;
     let documentPaths = [];
 
-    if (req.body.documentIds && req.body.documentIds.length > 0) {
-      // Get document paths from user's uploaded documents
-      const user = await User.findOne({ userId });
-      if (user && user.documents) {
-        documentPaths = req.body.documentIds
-          .map(docId => {
-            const doc = user.documents.find(d => d.documentId === docId);
-            return doc ? doc.filePath : null;
-          })
-          .filter(p => p !== null);
-      }
+    // Get document paths from user's uploaded documents
+    const user = await User.findOne({ userId });
+    if (user && user.documents) {
+      documentPaths = req.body.documentIds
+        .map(docId => {
+          const doc = user.documents.find(d => d.documentId === docId);
+          return doc ? doc.filePath : null;
+        })
+        .filter(p => p !== null);
+    }
+
+    if (documentPaths.length === 0) {
+      return res.status(400).send(responses.error(
+        'Unable to find the attached documents. Please try uploading them again.'
+      ));
     }
 
     // Run fraud detection
@@ -116,33 +127,38 @@ exports.submitClaim = async (req,res,next) => {
     }
 
     // Calculate genuineness score (100 - fraud score)
-    const genuineScore = verificationResults ? (100 - verificationResults.overallScore) : 50;
-    const isHighlyGenuine = genuineScore >= 90; // 90%+ confidence
-    const isModeratelyGenuine = genuineScore >= 70 && genuineScore < 90; // 70-89% confidence
+    // Score is already normalized to 10-90 range, so genuine score is also 10-90
+    let genuineScore = verificationResults ? (100 - verificationResults.overallScore) : 50;
+    // Ensure genuineScore is also in 10-90 range (mean-centric, never 0 or 100)
+    genuineScore = Math.max(10, Math.min(90, genuineScore));
+    
+    const isHighlyGenuine = genuineScore >= 75; // 75%+ confidence (adjusted for 10-90 scale)
+    const isModeratelyGenuine = genuineScore >= 55 && genuineScore < 75; // 55-74% confidence
     
     // Determine claim status and action
-    let claimStatus = 'pending';
+    let claimStatus = 'PENDING_DOCTOR_VERIFICATION';
     let autoApproved = false;
-    let requiresVerification = false;
+    let requiresVerification = true;
     let statusMessage = '';
     
     if (isHighlyGenuine) {
-      // AUTO-APPROVE: Highly genuine claims (90%+ confidence)
-      claimStatus = 'auto_approved';
+      // AUTO-APPROVE: Highly genuine claims (75%+ confidence on adjusted scale)
+      claimStatus = 'INSURANCE_APPROVED';
       autoApproved = true;
       statusMessage = `Auto-approved (${genuineScore.toFixed(1)}% confidence)`;
       console.log(`🎉 AUTO-APPROVING claim - ${genuineScore.toFixed(1)}% genuine`);
     } else if (isModeratelyGenuine) {
-      // WAIT FOR DOCTOR VERIFICATION: Moderate claims (70-89% confidence)
-      claimStatus = 'pending_verification';
+      // WAIT FOR DOCTOR VERIFICATION: Moderate claims (55-74% confidence)
+      claimStatus = 'PENDING_DOCTOR_VERIFICATION';
       requiresVerification = true;
       statusMessage = `Pending doctor verification (${genuineScore.toFixed(1)}% confidence)`;
       console.log(`⏳ PENDING VERIFICATION - ${genuineScore.toFixed(1)}% genuine`);
-    } else if (!verificationResults) {
-      // NO DOCUMENTS: Wait for verification
-      claimStatus = 'pending_verification';
+    } else {
+      // LOW CONFIDENCE: Requires verification
+      claimStatus = 'PENDING_DOCTOR_VERIFICATION';
       requiresVerification = true;
-      statusMessage = 'Pending verification (no documents provided)';
+      statusMessage = `Pending verification (${genuineScore.toFixed(1)}% confidence - requires review)`;
+      console.log(`⚠️ LOW CONFIDENCE - ${genuineScore.toFixed(1)}% genuine - requires review`);
     }
 
     // Submit claim to blockchain with status
@@ -328,5 +344,26 @@ exports.updateClaimDocuments = async (req,res,next) => {
     const payload = { claimId, documents };
     const result = await invoke.invokeTransaction('updateClaimDocuments', payload, userId);
     res.status(200).send(responses.ok(result));
+  } catch(err){ next(err); }
+};
+
+// Get all doctors for patient to select when granting access or submitting claims
+exports.listDoctors = async (req,res,next) => {
+  try{
+    const userId = req.user.id;
+    const result = await query.getQuery('getAllDoctors', {}, userId);
+    // Parse the JSON string result to return as array
+    let doctors = [];
+    try {
+      doctors = JSON.parse(result);
+      // Ensure doctors is an array
+      if (!Array.isArray(doctors)) {
+        doctors = [];
+      }
+    } catch (parseError) {
+      console.error('Error parsing doctors:', parseError);
+      doctors = [];
+    }
+    res.status(200).send(responses.ok(doctors));
   } catch(err){ next(err); }
 };

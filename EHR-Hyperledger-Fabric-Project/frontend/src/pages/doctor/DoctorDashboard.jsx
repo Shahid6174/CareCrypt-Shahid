@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
 import { 
   FiFileText, FiUser, FiUsers, FiCheckCircle, FiXCircle,
-  FiPlus, FiEye, FiHeart, FiActivity
+  FiPlus, FiEye, FiHeart, FiActivity, FiFile, FiPaperclip
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -397,15 +397,25 @@ const DoctorDashboard = () => {
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {claims.filter(c => c.status === 'pending' || !c.status).map((claim, idx) => (
+                    {claims.filter(c => c.status === 'pending' || c.status === 'PENDING_DOCTOR_VERIFICATION' || !c.status).map((claim, idx) => (
                       <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-yellow-300">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-4">
+                            <div className="flex items-center space-x-3 mb-4 flex-wrap">
                               <span className="font-bold text-gray-900 text-lg">{claim.claimId || `Claim #${idx + 1}`}</span>
                               <span className="px-4 py-1.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
                                 {claim.status || 'pending'}
                               </span>
+                              {claim.genuineScore && (
+                                <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center space-x-1 ${
+                                  claim.genuineScore >= 75 ? 'bg-green-100 text-green-700' :
+                                  claim.genuineScore >= 55 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  <FiCheckCircle className="w-3 h-3" />
+                                  <span>AI Confidence: {claim.genuineScore?.toFixed(1)}%</span>
+                                </span>
+                              )}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                               <div>
@@ -426,10 +436,70 @@ const DoctorDashboard = () => {
                               </div>
                             </div>
                             {claim.description && (
-                              <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{claim.description}</p>
+                              <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mb-3">{claim.description}</p>
+                            )}
+                            
+                            {/* Documents Section */}
+                            {claim.documents && claim.documents.length > 0 && (
+                              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                                <div className="flex items-center mb-3">
+                                  <FiPaperclip className="w-5 h-5 text-blue-600 mr-2" />
+                                  <span className="font-semibold text-blue-800">Attached Documents ({claim.documents.length})</span>
+                                </div>
+                                <div className="grid gap-2">
+                                  {claim.documents.map((doc, docIdx) => (
+                                    <div key={docIdx} className="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-100 hover:border-blue-300 transition-all">
+                                      <div className="flex items-center flex-1">
+                                        <FiFile className="w-4 h-4 text-blue-500 mr-3" />
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium text-gray-800">{doc.fileName || `Document ${docIdx + 1}`}</p>
+                                          <p className="text-xs text-gray-500">
+                                            {doc.fileType || 'Unknown'} 
+                                            {doc.fileSize && ` • ${(doc.fileSize / 1024).toFixed(1)} KB`}
+                                            {doc.uploadedAt && ` • ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      {doc.documentId && (
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              const response = await api.get(`/documents/download/${doc.documentId}`, {
+                                                responseType: 'blob'
+                                              })
+                                              const url = window.URL.createObjectURL(new Blob([response.data]))
+                                              const link = document.createElement('a')
+                                              link.href = url
+                                              link.setAttribute('download', doc.fileName || 'document')
+                                              document.body.appendChild(link)
+                                              link.click()
+                                              link.remove()
+                                              toast.success('Document downloaded')
+                                            } catch (error) {
+                                              console.error('Error downloading document:', error)
+                                              toast.error('Failed to download document')
+                                            }
+                                          }}
+                                          className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-all flex items-center space-x-1"
+                                        >
+                                          <FiEye className="w-3 h-3" />
+                                          <span>View</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {(!claim.documents || claim.documents.length === 0) && (
+                              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-center">
+                                <FiFile className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">No documents attached to this claim</p>
+                              </div>
                             )}
                           </div>
-                          <div className="flex space-x-3 ml-4">
+                          <div className="flex flex-col space-y-3 ml-4">
                             <button
                               onClick={() => handleVerifyClaim(claim.claimId, true, 'Claim verified by doctor')}
                               className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl flex items-center space-x-2 font-semibold"

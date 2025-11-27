@@ -4,7 +4,7 @@ import Layout from '../../components/Layout'
 import { 
   FiFileText, FiPlus, FiUser, FiHeart, FiShield,
   FiUpload, FiEdit, FiEye, FiDownload, FiTrash2, FiFile,
-  FiAlertTriangle, FiAlertCircle, FiCheckCircle
+  FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPaperclip
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -19,10 +19,12 @@ const PatientDashboard = () => {
   const [records, setRecords] = useState([])
   const [profile, setProfile] = useState(null)
   const [documents, setDocuments] = useState([])
+  const [doctors, setDoctors] = useState([])
   const [fraudStatus, setFraudStatus] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showClaimForm, setShowClaimForm] = useState(false)
   const [showDocumentUpload, setShowDocumentUpload] = useState(false)
+  const [claimDocuments, setClaimDocuments] = useState([])
   const [claimForm, setClaimForm] = useState({
     doctorId: '',
     policyId: '',
@@ -76,6 +78,7 @@ const PatientDashboard = () => {
     if (!user || !user.userId || authLoading || user.restricted) return
     loadData()
     loadFraudStatus()
+    loadDoctors()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeTab, authLoading])
 
@@ -178,6 +181,25 @@ const PatientDashboard = () => {
     }
   }
 
+  const loadDoctors = async () => {
+    if (!user || !user.userId) return
+    
+    try {
+      const response = await api.get('/patient/doctors')
+      const doctorsData = response.data?.data || response.data || []
+      setDoctors(Array.isArray(doctorsData) ? doctorsData : [])
+    } catch (error) {
+      console.error('Error loading doctors:', error)
+      // Don't show error toast as this is background data
+      setDoctors([])
+    }
+  }
+
+  const handleClaimDocumentChange = (e) => {
+    const files = Array.from(e.target.files)
+    setClaimDocuments(files)
+  }
+
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
@@ -267,12 +289,33 @@ const PatientDashboard = () => {
       return
     }
     
+    // Validate that documents are attached
+    if (!documents || documents.length === 0) {
+      toast.error('⚠️ Please attach at least one medical document before submitting the claim. Documents are required for verification.')
+      return
+    }
+    
     try {
       setLoading(true)
+      
+      // Get document IDs from uploaded documents
+      const documentIds = documents.map(doc => doc.documentId)
+      
+      // Prepare documents info (file names for blockchain storage)
+      const documentInfo = documents.map(doc => ({
+        documentId: doc.documentId,
+        fileName: doc.fileName,
+        fileSize: doc.fileSize,
+        fileType: doc.fileType,
+        uploadedAt: doc.uploadedAt
+      }))
+      
       const response = await api.post('/patient/claim/submit', {
         ...claimForm,
         claimAmount: parseFloat(claimForm.claimAmount),
-        medicalRecordIds: claimForm.medicalRecordIds.filter(id => id.trim())
+        medicalRecordIds: claimForm.medicalRecordIds.filter(id => id.trim()),
+        documents: documentInfo,
+        documentIds: documentIds
       })
       
       if (response.data.success) {
@@ -281,6 +324,7 @@ const PatientDashboard = () => {
           notifyClaimSubmitted(user.userId, response.data.data?.claimId || 'NEW', claimForm.doctorId)
         }
         setShowClaimForm(false)
+        setClaimDocuments([])
         setClaimForm({
           doctorId: '',
           policyId: '',
@@ -454,15 +498,23 @@ const PatientDashboard = () => {
                     <form onSubmit={handleSubmitClaim} className="space-y-6">
                       <div className="grid grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">Doctor ID *</label>
-                          <input
-                            type="text"
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Select Doctor *</label>
+                          <select
                             value={claimForm.doctorId}
                             onChange={(e) => setClaimForm({ ...claimForm, doctorId: e.target.value })}
                             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                            placeholder="Enter doctor ID"
                             required
-                          />
+                          >
+                            <option value="">-- Select a Doctor --</option>
+                            {doctors.map((doctor, idx) => (
+                              <option key={idx} value={doctor.doctorId}>
+                                {doctor.name} - {doctor.city} ({doctor.doctorId})
+                              </option>
+                            ))}
+                          </select>
+                          {doctors.length === 0 && (
+                            <p className="text-xs text-gray-500 mt-1">No doctors available. Loading...</p>
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-gray-700 mb-2">Policy ID *</label>
@@ -540,6 +592,37 @@ const PatientDashboard = () => {
                           required
                         />
                       </div>
+                      
+                      {/* Document Upload Section */}
+                      <div className="bg-white rounded-xl p-6 border-2 border-dashed border-blue-300">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          <FiUpload className="inline w-5 h-5 mr-2 text-blue-500" />
+                          Attach Supporting Documents
+                        </label>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={handleClaimDocumentChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                          accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Accepted: PDF, JPEG, PNG, GIF, DOC, DOCX (Max 10MB each). 
+                          Upload bills, prescriptions, lab reports, etc.
+                        </p>
+                        {claimDocuments.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-sm font-medium text-gray-700">Selected files ({claimDocuments.length}):</p>
+                            {claimDocuments.map((file, idx) => (
+                              <div key={idx} className="flex items-center text-sm text-gray-600 bg-blue-50 px-3 py-2 rounded-lg">
+                                <FiFile className="w-4 h-4 mr-2 text-blue-500" />
+                                {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex space-x-4">
                         <button
                           type="submit"
@@ -550,7 +633,10 @@ const PatientDashboard = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setShowClaimForm(false)}
+                          onClick={() => {
+                            setShowClaimForm(false)
+                            setClaimDocuments([])
+                          }}
                           className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all font-semibold"
                         >
                           Cancel
@@ -577,16 +663,26 @@ const PatientDashboard = () => {
                       <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-blue-300">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-4">
+                            <div className="flex items-center space-x-3 mb-4 flex-wrap">
                               <span className="font-bold text-gray-900 text-lg">{claim.claimId || `Claim #${idx + 1}`}</span>
                               <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${
-                                claim.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                claim.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                claim.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                claim.status === 'approved' || claim.status === 'INSURANCE_APPROVED' ? 'bg-green-100 text-green-700' :
+                                claim.status === 'rejected' || claim.status === 'DOCTOR_REJECTED' || claim.status === 'INSURANCE_REJECTED' ? 'bg-red-100 text-red-700' :
+                                claim.status === 'pending' || claim.status === 'PENDING_DOCTOR_VERIFICATION' ? 'bg-yellow-100 text-yellow-700' :
                                 'bg-blue-100 text-blue-700'
                               }`}>
                                 {claim.status || 'pending'}
                               </span>
+                              {claim.genuineScore && (
+                                <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center space-x-1 ${
+                                  claim.genuineScore >= 75 ? 'bg-green-100 text-green-700' :
+                                  claim.genuineScore >= 55 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  <FiCheckCircle className="w-3 h-3" />
+                                  <span>Confidence: {claim.genuineScore?.toFixed(1)}%</span>
+                                </span>
+                              )}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div>
@@ -618,62 +714,130 @@ const PatientDashboard = () => {
               </div>
             )}
 
-            {/* Records Tab */}
+            {/* Records Tab - Complete Patient History */}
             {activeTab === 'records' && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Medical Records</h2>
-                {loading ? (
-                  <div className="text-center py-16">
-                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mx-auto"></div>
-                  </div>
-                ) : records.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
-                    <FiHeart className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                    <p className="text-gray-600 font-semibold text-lg">No medical records found</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    {records.map((record, idx) => (
-                      <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-purple-300">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-4">
-                              <span className="font-bold text-gray-900 text-lg">{record.recordId || `Record #${idx + 1}`}</span>
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Complete Medical History</h2>
+                
+                {/* Medical Records Section */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <FiHeart className="w-6 h-6 mr-2 text-purple-500" />
+                    Medical Records ({records.length})
+                  </h3>
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500 mx-auto"></div>
+                    </div>
+                  ) : records.length === 0 ? (
+                    <div className="text-center py-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
+                      <FiHeart className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-gray-600 font-semibold">No medical records found</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {records.map((record, idx) => (
+                        <div key={idx} className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all hover:border-purple-300">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-3">
+                                <span className="font-bold text-gray-900">{record.recordId || `Record #${idx + 1}`}</span>
+                                <span className="text-xs text-gray-500">
+                                  {record.timestamp ? new Date(record.timestamp).toLocaleDateString() : record.date || '-'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                <div>
+                                  <p className="text-gray-500 font-medium">Diagnosis</p>
+                                  <p className="font-semibold text-gray-900">{record.diagnosis || '-'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500 font-medium">Treatment</p>
+                                  <p className="font-semibold text-gray-900">{record.treatment || record.prescription || '-'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500 font-medium">Doctor</p>
+                                  <p className="font-semibold text-gray-900">{record.doctorId || '-'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500 font-medium">Date</p>
+                                  <p className="font-semibold text-gray-900">
+                                    {record.timestamp ? new Date(record.timestamp).toLocaleDateString() : record.date || '-'}
+                                  </p>
+                                </div>
+                              </div>
+                              {record.notes && (
+                                <div className="mt-2">
+                                  <p className="text-gray-500 text-xs font-medium">Notes</p>
+                                  <p className="text-sm bg-purple-50 p-2 rounded-lg mt-1">{record.notes}</p>
+                                </div>
+                              )}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <p className="text-gray-500 font-medium">Diagnosis</p>
-                                <p className="font-semibold text-gray-900">{record.diagnosis || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500 font-medium">Treatment</p>
-                                <p className="font-semibold text-gray-900">{record.treatment || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500 font-medium">Date</p>
-                                <p className="font-semibold text-gray-900">{record.date || '-'}</p>
-                              </div>
-                            </div>
-                            {record.notes && (
-                              <div className="mt-3">
-                                <p className="text-gray-500 text-sm font-medium">Notes</p>
-                                <p className="text-sm bg-gray-50 p-3 rounded-lg mt-1">{record.notes}</p>
-                              </div>
-                            )}
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Claims History Section */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <FiFileText className="w-6 h-6 mr-2 text-blue-500" />
+                    Claims History ({claims.length})
+                  </h3>
+                  {claims.length === 0 ? (
+                    <div className="text-center py-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
+                      <FiFileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-gray-600 font-semibold">No claims history</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {claims.map((claim, idx) => (
+                        <div key={idx} className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all hover:border-blue-300">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <span className="font-bold text-gray-900">{claim.claimId || `Claim #${idx + 1}`}</span>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              claim.status === 'approved' || claim.status === 'INSURANCE_APPROVED' ? 'bg-green-100 text-green-700' :
+                              claim.status === 'rejected' || claim.status === 'DOCTOR_REJECTED' || claim.status === 'INSURANCE_REJECTED' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {claim.status || 'pending'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <p className="text-gray-500">Type</p>
+                              <p className="font-semibold text-gray-900">{claim.claimType || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Amount</p>
+                              <p className="font-semibold text-gray-900">${claim.claimAmount || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Submitted</p>
+                              <p className="font-semibold text-gray-900">
+                                {claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Confidence</p>
+                              <p className="font-semibold text-gray-900">{claim.genuineScore?.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Documents Tab */}
             {activeTab === 'documents' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-bold text-gray-900">My Documents</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">All My Documents</h2>
                   <button
                     onClick={() => setShowDocumentUpload(!showDocumentUpload)}
                     className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl flex items-center space-x-2 font-semibold"
@@ -743,69 +907,134 @@ const PatientDashboard = () => {
                   </div>
                 )}
 
-                {loading ? (
-                  <div className="text-center py-16">
-                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-600 font-medium">Loading documents...</p>
-                  </div>
-                ) : documents.length === 0 ? (
-                  <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
-                    <FiFile className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                    <p className="text-gray-600 font-semibold text-lg">No documents uploaded</p>
-                    <p className="text-sm mt-2 text-gray-500">Upload your first document to get started</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    {documents.map((doc, idx) => (
-                      <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:shadow-xl transition-all hover:border-green-300">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-3">
-                              <FiFile className="w-6 h-6 text-gray-400" />
-                              <span className="font-bold text-gray-900">{doc.fileName}</span>
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${categoryColors[doc.category]}`}>
-                                {doc.category.replace('_', ' ')}
-                              </span>
+                {/* Uploaded Documents Section */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <FiFile className="w-6 h-6 mr-2 text-green-500" />
+                    Uploaded Documents ({documents.length})
+                  </h3>
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-green-500 mx-auto"></div>
+                    </div>
+                  ) : documents.length === 0 ? (
+                    <div className="text-center py-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
+                      <FiFile className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-gray-600 font-semibold">No documents uploaded</p>
+                      <p className="text-sm mt-1 text-gray-500">Upload your first document to get started</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {documents.map((doc, idx) => (
+                        <div key={idx} className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all hover:border-green-300">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <FiFile className="w-5 h-5 text-gray-400" />
+                                <span className="font-bold text-gray-900">{doc.fileName}</span>
+                                {doc.category && (
+                                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${categoryColors[doc.category] || 'bg-gray-100 text-gray-700'}`}>
+                                    {doc.category.replace('_', ' ')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                                <div>
+                                  <p className="text-gray-500 font-medium">Type</p>
+                                  <p className="font-semibold text-gray-900">{doc.fileType}</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500 font-medium">Size</p>
+                                  <p className="font-semibold text-gray-900">{(doc.fileSize / 1024).toFixed(2)} KB</p>
+                                </div>
+                                <div>
+                                  <p className="text-gray-500 font-medium">Uploaded</p>
+                                  <p className="font-semibold text-gray-900">{new Date(doc.uploadedAt).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                              {doc.description && (
+                                <p className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">{doc.description}</p>
+                              )}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <p className="text-gray-500 font-medium">Type</p>
-                                <p className="font-semibold text-gray-900">{doc.fileType}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500 font-medium">Size</p>
-                                <p className="font-semibold text-gray-900">{(doc.fileSize / 1024).toFixed(2)} KB</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500 font-medium">Uploaded</p>
-                                <p className="font-semibold text-gray-900">{new Date(doc.uploadedAt).toLocaleDateString()}</p>
-                              </div>
+                            <div className="flex space-x-2 ml-4">
+                              <button
+                                onClick={() => handleDownloadDocument(doc.documentId, doc.fileName)}
+                                className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
+                                title="Download"
+                              >
+                                <FiDownload className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDocument(doc.documentId)}
+                                className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"
+                                title="Delete"
+                              >
+                                <FiTrash2 className="w-5 h-5" />
+                              </button>
                             </div>
-                            {doc.description && (
-                              <p className="mt-3 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{doc.description}</p>
-                            )}
-                          </div>
-                          <div className="flex space-x-2 ml-4">
-                            <button
-                              onClick={() => handleDownloadDocument(doc.documentId, doc.fileName)}
-                              className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
-                              title="Download"
-                            >
-                              <FiDownload className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteDocument(doc.documentId)}
-                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-all"
-                              title="Delete"
-                            >
-                              <FiTrash2 className="w-5 h-5" />
-                            </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Claim Documents Section */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <FiPaperclip className="w-6 h-6 mr-2 text-blue-500" />
+                    Claim Documents
+                  </h3>
+                  {claims.filter(c => c.documents && c.documents.length > 0).length === 0 ? (
+                    <div className="text-center py-8 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl">
+                      <FiPaperclip className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p className="text-gray-600 font-semibold">No claim documents</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {claims.filter(c => c.documents && c.documents.length > 0).map((claim, claimIdx) => (
+                        <div key={claimIdx} className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <span className="font-semibold text-gray-900">Claim: {claim.claimId}</span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                              claim.status === 'INSURANCE_APPROVED' ? 'bg-green-100 text-green-700' :
+                              claim.status === 'DOCTOR_REJECTED' || claim.status === 'INSURANCE_REJECTED' ? 'bg-red-100 text-red-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {claim.status}
+                            </span>
+                          </div>
+                          <div className="grid gap-2">
+                            {claim.documents.map((doc, docIdx) => (
+                              <div key={docIdx} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                <div className="flex items-center flex-1">
+                                  <FiFile className="w-4 h-4 text-blue-500 mr-3" />
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">{doc.fileName || `Document ${docIdx + 1}`}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {doc.fileType || 'Unknown'} 
+                                      {doc.fileSize && ` • ${(doc.fileSize / 1024).toFixed(1)} KB`}
+                                      {doc.uploadedAt && ` • ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                                    </p>
+                                  </div>
+                                </div>
+                                {doc.documentId && (
+                                  <button
+                                    onClick={() => handleDownloadDocument(doc.documentId, doc.fileName)}
+                                    className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
+                                    title="Download"
+                                  >
+                                    <FiDownload className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -838,6 +1067,37 @@ const PatientDashboard = () => {
             {activeTab === 'access' && (
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Access Control</h2>
+                
+                {/* Doctors List */}
+                <div className="mb-6 bg-white rounded-2xl p-6 border border-gray-200 shadow-lg">
+                  <h3 className="font-bold text-lg mb-4 flex items-center">
+                    <FiUser className="w-5 h-5 mr-2 text-blue-500" />
+                    Available Doctors ({doctors.length})
+                  </h3>
+                  {doctors.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">Loading doctors...</p>
+                  ) : (
+                    <div className="grid gap-3 max-h-64 overflow-y-auto">
+                      {doctors.map((doctor, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-xl p-4 hover:bg-blue-50 transition-all">
+                          <div className="flex items-center space-x-3">
+                            <div className="bg-blue-100 rounded-full p-2">
+                              <FiUser className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">{doctor.name || 'Unknown'}</p>
+                              <p className="text-sm text-gray-500">
+                                {doctor.city || 'N/A'} | Hospital: {doctor.hospitalId || 'N/A'}
+                              </p>
+                              <p className="text-xs text-blue-600 font-mono">{doctor.doctorId}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-6">
                   <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 border border-green-100 shadow-lg">
                     <h3 className="font-bold text-lg mb-4">Grant Doctor Access</h3>
@@ -848,6 +1108,10 @@ const PatientDashboard = () => {
                         return
                       }
                       const doctorId = e.target.doctorId.value
+                      if (!doctorId) {
+                        toast.error('Please select a doctor')
+                        return
+                      }
                       try {
                         const response = await api.post('/patient/grantAccess', { doctorIdToGrant: doctorId })
                         if (response.data.success) {
@@ -859,13 +1123,18 @@ const PatientDashboard = () => {
                         toast.error(error.response?.data?.message || 'Failed to grant access')
                       }
                     }} className="flex space-x-3">
-                      <input
-                        type="text"
+                      <select
                         name="doctorId"
-                        placeholder="Doctor ID"
                         className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
                         required
-                      />
+                      >
+                        <option value="">-- Select a Doctor to Grant Access --</option>
+                        {doctors.map((doctor, idx) => (
+                          <option key={idx} value={doctor.doctorId}>
+                            {doctor.name} - {doctor.city} ({doctor.doctorId})
+                          </option>
+                        ))}
+                      </select>
                       <button type="submit" className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl font-semibold">
                         Grant Access
                       </button>
@@ -881,6 +1150,10 @@ const PatientDashboard = () => {
                         return
                       }
                       const doctorId = e.target.doctorId.value
+                      if (!doctorId) {
+                        toast.error('Please select a doctor')
+                        return
+                      }
                       try {
                         const response = await api.post('/patient/revokeAccess', { doctorIdToRevoke: doctorId })
                         if (response.data.success) {
@@ -892,13 +1165,18 @@ const PatientDashboard = () => {
                         toast.error(error.response?.data?.message || 'Failed to revoke access')
                       }
                     }} className="flex space-x-3">
-                      <input
-                        type="text"
+                      <select
                         name="doctorId"
-                        placeholder="Doctor ID"
                         className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent transition"
                         required
-                      />
+                      >
+                        <option value="">-- Select a Doctor to Revoke Access --</option>
+                        {doctors.map((doctor, idx) => (
+                          <option key={idx} value={doctor.doctorId}>
+                            {doctor.name} - {doctor.city} ({doctor.doctorId})
+                          </option>
+                        ))}
+                      </select>
                       <button type="submit" className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl font-semibold">
                         Revoke Access
                       </button>
