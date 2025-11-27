@@ -17,6 +17,7 @@ const chatbotRoutes = require('./routes/chatbotRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const rewardRoutes = require('./routes/rewardRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const statisticsRoutes = require('./routes/statisticsRoutes');
 
 // Connect to MongoDB
 connectDB();
@@ -31,6 +32,7 @@ app.use('/chatbot', chatbotRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/rewards', rewardRoutes);
 app.use('/analytics', analyticsRoutes);
+app.use('/statistics', statisticsRoutes);
 app.use('/auth', authRoutes);
 app.use('/patient', patientRoutes);
 app.use('/doctor', doctorRoutes);

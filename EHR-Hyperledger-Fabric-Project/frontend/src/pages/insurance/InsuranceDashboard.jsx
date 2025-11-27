@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
+import InsuranceStatistics from '../../components/InsuranceStatistics'
 import { 
   FiFileText, FiUser, FiCheckCircle, FiXCircle, FiEye,
-  FiDollarSign, FiClock, FiFile, FiPaperclip
+  FiDollarSign, FiClock, FiFile, FiPaperclip, FiActivity
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -29,6 +30,7 @@ const InsuranceDashboard = () => {
     claimId: '',
     rejectionReason: ''
   })
+  const [statistics, setStatistics] = useState(null)
 
   // Show loading while auth is being checked
   if (authLoading) {
@@ -74,6 +76,8 @@ const InsuranceDashboard = () => {
       await loadClaims()
     } else if (activeTab === 'profile') {
       await loadProfile()
+    } else if (activeTab === 'statistics') {
+      await loadStatistics()
     }
   }
 
@@ -113,6 +117,21 @@ const InsuranceDashboard = () => {
       console.error('Error loading profile:', error)
       toast.error(error.response?.data?.message || 'Failed to load profile')
       setProfile(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadStatistics = async () => {
+    if (!user || !user.userId) return
+    
+    try {
+      setLoading(true)
+      const response = await api.get(`/statistics/insurance/agent/${user.userId}`)
+      setStatistics(response.data?.data || response.data || null)
+    } catch (error) {
+      console.error('Error loading statistics:', error)
+      toast.error('Failed to load statistics')
     } finally {
       setLoading(false)
     }
@@ -213,7 +232,7 @@ const InsuranceDashboard = () => {
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100">
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              {['claims', 'profile'].map((tab) => (
+              {['claims', 'statistics', 'profile'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -509,6 +528,10 @@ const InsuranceDashboard = () => {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === 'statistics' && (
+              <InsuranceStatistics statistics={statistics} loading={loading} />
             )}
 
             {activeTab === 'profile' && (

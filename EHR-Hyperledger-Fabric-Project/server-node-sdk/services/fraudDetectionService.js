@@ -269,13 +269,14 @@ class FraudDetectionService {
 
     verificationResults.overallScore = avgFraudScore;
 
-    // Cross-verify claim data with extracted text
-    const crossVerification = this.crossVerifyClaimData(
+    // Cross-verify claim data with extracted text (now async)
+    const crossVerification = await this.crossVerifyClaimData(
       claimData,
       verificationResults.documents
     );
     verificationResults.overallScore += crossVerification.score;
     verificationResults.recommendations.push(...crossVerification.recommendations);
+    verificationResults.matchDetails = crossVerification.matches;
 
     // Normalize score to mean-centric range (10-90) - NEVER 0% or 100%
     // This creates a bell curve distribution centered around 50%
@@ -291,12 +292,89 @@ class FraudDetectionService {
   }
 
   /**
-   * Cross-verify claim data with document content
+   * Calculate similarity between two strings using Levenshtein-like approach
    */
-  crossVerifyClaimData(claimData, documents) {
+  calculateStringSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    
+    if (s1 === s2) return 100;
+    
+    // Calculate character-level similarity
+    const longer = s1.length > s2.length ? s1 : s2;
+    const shorter = s1.length > s2.length ? s2 : s1;
+    
+    if (longer.length === 0) return 100;
+    
+    // Check if shorter string is contained in longer
+    if (longer.includes(shorter)) return 80;
+    
+    // Calculate edit distance
+    const editDistance = this.levenshteinDistance(s1, s2);
+    const similarity = ((longer.length - editDistance) / longer.length) * 100;
+    
+    return Math.max(0, similarity);
+  }
+
+  /**
+   * Levenshtein distance algorithm
+   */
+  levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  }
+
+  /**
+   * Extract patient name from user database
+   */
+  async getPatientName(patientId) {
+    try {
+      const user = await User.findOne({ userId: patientId });
+      return user ? user.name : null;
+    } catch (err) {
+      console.error('Error fetching patient name:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Cross-verify claim data with document content (Enhanced)
+   */
+  async crossVerifyClaimData(claimData, documents) {
     const result = {
       score: 0,
-      recommendations: []
+      recommendations: [],
+      matches: {
+        patientName: { found: false, similarity: 0 },
+        amount: { found: false, similarity: 0 },
+        description: { found: false, similarity: 0 },
+        claimType: { valid: false }
+      }
     };
 
     const allText = documents
@@ -305,48 +383,171 @@ class FraudDetectionService {
       .join(' ')
       .toLowerCase();
 
-    // Check if claim amount appears in documents
+    if (allText.length === 0) {
+      result.score += 30;
+      result.recommendations.push('No readable text found in documents');
+      return result;
+    }
+
+    // 1. ENHANCED: Check patient name match
+    if (claimData.patientId) {
+      const patientName = await this.getPatientName(claimData.patientId);
+      
+      if (patientName) {
+        // Extract name from OCR text
+        const namePatterns = [
+          /patient\s*(?:name)?[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+          /name\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+          /\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b/g // General name pattern
+        ];
+
+        let bestMatch = 0;
+        let foundName = null;
+
+        for (const pattern of namePatterns) {
+          const matches = allText.matchAll(pattern);
+          for (const match of matches) {
+            const extractedName = match[1];
+            const similarity = this.calculateStringSimilarity(patientName, extractedName);
+            if (similarity > bestMatch) {
+              bestMatch = similarity;
+              foundName = extractedName;
+            }
+          }
+        }
+
+        result.matches.patientName.similarity = bestMatch;
+        result.matches.patientName.found = bestMatch >= 60;
+
+        if (bestMatch < 60) {
+          result.score += 20; // High penalty for name mismatch
+          result.recommendations.push(
+            `Patient name mismatch: Expected "${patientName}", ${foundName ? `found similar to "${foundName}" (${bestMatch.toFixed(0)}% match)` : 'name not found in documents'}`
+          );
+        } else if (bestMatch < 80) {
+          result.score += 10; // Moderate penalty for partial match
+          result.recommendations.push(
+            `Patient name partially matches (${bestMatch.toFixed(0)}% confidence)`
+          );
+        }
+      }
+    }
+
+    // 2. ENHANCED: Check if claim amount appears in documents with fuzzy matching
     if (claimData.claimAmount) {
       const amountStr = claimData.claimAmount.toString();
-      if (!allText.includes(amountStr)) {
+      const amountVariations = [
+        amountStr,
+        `$${amountStr}`,
+        `$ ${amountStr}`,
+        amountStr.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,') // Add commas
+      ];
+
+      const found = amountVariations.some(variation => 
+        allText.includes(variation.toLowerCase())
+      );
+
+      // Also check for approximate amounts (within 10%)
+      const extractedAmounts = allText.match(/\$?\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g) || [];
+      const numericAmounts = extractedAmounts.map(a => 
+        parseFloat(a.replace(/[$,\s]/g, ''))
+      ).filter(n => !isNaN(n));
+
+      const closeMatch = numericAmounts.some(amt => {
+        const diff = Math.abs(amt - claimData.claimAmount);
+        const percentDiff = (diff / claimData.claimAmount) * 100;
+        return percentDiff <= 10;
+      });
+
+      result.matches.amount.found = found || closeMatch;
+
+      if (!found && !closeMatch) {
         result.score += 15;
         result.recommendations.push(
           `Claim amount $${amountStr} not found in supporting documents`
         );
-      }
-    }
-
-    // Check if diagnosis/treatment appears
-    if (claimData.description) {
-      const descWords = claimData.description.toLowerCase().split(' ');
-      const matchedWords = descWords.filter(word => 
-        word.length > 4 && allText.includes(word)
-      ).length;
-
-      if (matchedWords < 2) {
-        result.score += 10;
+      } else if (!found && closeMatch) {
+        result.score += 5;
         result.recommendations.push(
-          'Claim description does not match document content'
+          `Exact claim amount not found, but similar amount detected in documents`
         );
       }
     }
 
-    // Check claim type legitimacy
+    // 3. ENHANCED: Check if diagnosis/treatment description matches with better similarity
+    if (claimData.description) {
+      const descWords = claimData.description.toLowerCase()
+        .split(/\s+/)
+        .filter(word => word.length > 3); // Filter meaningful words
+
+      const matchedWords = descWords.filter(word => 
+        allText.includes(word)
+      );
+
+      const matchPercentage = (matchedWords.length / descWords.length) * 100;
+      result.matches.description.similarity = matchPercentage;
+      result.matches.description.found = matchPercentage >= 40;
+
+      if (matchPercentage < 20) {
+        result.score += 15; // High penalty for no match
+        result.recommendations.push(
+          'Claim description does not match document content (< 20% match)'
+        );
+      } else if (matchPercentage < 40) {
+        result.score += 10; // Moderate penalty
+        result.recommendations.push(
+          `Claim description partially matches document content (${matchPercentage.toFixed(0)}% match)`
+        );
+      } else if (matchPercentage < 60) {
+        result.score += 5; // Low penalty
+        result.recommendations.push(
+          `Claim description moderately matches (${matchPercentage.toFixed(0)}% match)`
+        );
+      }
+    }
+
+    // 4. Check hospital/doctor information if provided
+    if (claimData.hospitalId) {
+      const hospitalTerms = ['hospital', 'medical center', 'clinic', 'healthcare'];
+      const hasHospitalMention = hospitalTerms.some(term => allText.includes(term));
+      
+      if (!hasHospitalMention) {
+        result.score += 5;
+        result.recommendations.push('No hospital or medical facility mentioned in documents');
+      }
+    }
+
+    // 5. Check claim type legitimacy
     const validClaimTypes = [
-      'surgery', 'consultation', 'emergency', 'medication',
-      'lab tests', 'diagnosis', 'treatment', 'therapy'
+      'surgery', 'consultation', 'emergency', 'medication', 'prescription',
+      'lab tests', 'lab test', 'diagnosis', 'treatment', 'therapy', 'checkup',
+      'vaccination', 'imaging', 'x-ray', 'mri', 'ct scan', 'dental', 'optical'
     ];
 
     if (claimData.claimType) {
       const claimTypeLower = claimData.claimType.toLowerCase();
       const isValidType = validClaimTypes.some(type => 
-        claimTypeLower.includes(type)
+        claimTypeLower.includes(type) || type.includes(claimTypeLower)
       );
+
+      result.matches.claimType.valid = isValidType;
 
       if (!isValidType) {
         result.score += 10;
-        result.recommendations.push('Unusual claim type specified');
+        result.recommendations.push(`Unusual claim type: "${claimData.claimType}"`);
       }
+    }
+
+    // 6. Check for medical terminology consistency
+    const medicalTermsFound = this.medicalTerms.filter(term => 
+      allText.includes(term)
+    ).length;
+
+    if (medicalTermsFound < 2) {
+      result.score += 10;
+      result.recommendations.push(
+        `Insufficient medical terminology in documents (found ${medicalTermsFound} terms)`
+      );
     }
 
     return result;
