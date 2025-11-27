@@ -318,7 +318,6 @@ To transform healthcare data management by leveraging blockchain's immutability 
 ## 🚀 Future Roadmap
 
 - [ ] Mobile applications (iOS & Android)
-- [ ] Integration with wearable devices
 - [ ] Predictive analytics for health trends
 - [ ] Multi-language support
 - [ ] Telemedicine integration
