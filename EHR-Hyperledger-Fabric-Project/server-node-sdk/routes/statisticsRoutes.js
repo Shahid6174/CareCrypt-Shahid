@@ -4,10 +4,10 @@ const statisticsController = require('../controllers/statisticsController');
 const requireUser = require('../middleware/requireUser');
 
 // Insurance agent statistics
-router.get('/insurance/agent/:agentId?', requireUser, statisticsController.getInsuranceAgentStats);
+router.get('/insurance/agent/:agentId', requireUser, statisticsController.getInsuranceAgentStats);
 
 // Doctor statistics
-router.get('/doctor/:doctorId?', requireUser, statisticsController.getDoctorStats);
+router.get('/doctor/:doctorId', requireUser, statisticsController.getDoctorStats);
 
 // Hospital admin statistics
 router.get('/hospital', requireUser, statisticsController.getHospitalAdminStats);
