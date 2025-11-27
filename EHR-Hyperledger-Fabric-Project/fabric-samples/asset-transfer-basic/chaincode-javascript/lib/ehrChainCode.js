@@ -214,7 +214,7 @@ class ehrChainCode extends Contract {
 
   // --- Claims ---
   async submitClaim(ctx,args){
-    const { patientId, doctorId, policyId, hospitalId, claimAmount, medicalRecordIds, claimType, description, documents } = JSON.parse(args);
+    const { patientId, doctorId, policyId, hospitalId, claimAmount, medicalRecordIds, claimType, description, documents, status, autoApproved, genuineScore } = JSON.parse(args);
     const { role, uuid } = this.getCallerAttributes(ctx);
     if(role !== 'patient') throw new Error('Only patient can submit claim');
     if(uuid !== patientId) throw new Error('Caller not owner');
@@ -222,7 +222,11 @@ class ehrChainCode extends Contract {
     if(!pBytes || !pBytes.length) throw new Error(`Patient ${patientId} not found`);
     const claimId = this.claimIdGenerator(ctx); const claimKey = `claim-${claimId}`;
     const now = new Date(ctx.stub.getTxTimestamp().seconds.low * 1000).toISOString();
-    const claim = { claimId, patientId, doctorId, policyId, hospitalId, claimAmount, medicalRecordIds: medicalRecordIds||[], claimType, description: description||'', documents: documents||[], status: 'PENDING_DOCTOR_VERIFICATION', createdAt: now, updatedAt: now, history:[{at:now,by:patientId,action:'SUBMITTED'}] };
+    const claimStatus = status || 'PENDING_DOCTOR_VERIFICATION';
+    const claim = { claimId, patientId, doctorId, policyId, hospitalId, claimAmount, medicalRecordIds: medicalRecordIds||[], claimType, description: description||'', documents: documents||[], status: claimStatus, createdAt: now, updatedAt: now, history:[{at:now,by:patientId,action:'SUBMITTED'}] };
+    // Add OCR/AI verification data if provided
+    if (genuineScore !== undefined) claim.genuineScore = genuineScore;
+    if (autoApproved !== undefined) claim.autoApproved = autoApproved;
     await ctx.stub.putState(claimKey, Buffer.from(JSON.stringify(claim)));
     const patientClaimsKey = `patientClaims-${patientId}`; let pc = []; const pcBytes = await ctx.stub.getState(patientClaimsKey);
     if(pcBytes && pcBytes.length) pc = JSON.parse(pcBytes.toString());

@@ -103,16 +103,67 @@ exports.downloadDocument = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { documentId } = req.params;
+    const { patientId } = req.query; // Optional: for doctors to specify patient
 
-    const user = await User.findOne({ userId });
-    if (!user) {
-      return res.status(404).send(responses.error('User not found'));
+    let user = await User.findOne({ userId });
+    let document = null;
+
+    // Check if the requester owns the document
+    if (user && user.documents) {
+      document = user.documents.find(doc => doc.documentId === documentId);
     }
 
-    // Find document
-    const document = user.documents.find(doc => doc.documentId === documentId);
+    // If document not found and user might be a doctor, check patient's documents
+    if (!document && patientId) {
+      const patient = await User.findOne({ userId: patientId });
+      if (patient && patient.documents) {
+        document = patient.documents.find(doc => doc.documentId === documentId);
+        
+        // Verify doctor has access to this patient (via blockchain query)
+        if (document) {
+          try {
+            const query = require('../query');
+            const patientDataStr = await query.getQuery('getPatientById', { patientId }, userId);
+            const patientData = JSON.parse(patientDataStr);
+            
+            // Check if doctor is authorized
+            if (!patientData.authorizedDoctors || !patientData.authorizedDoctors.includes(userId)) {
+              return res.status(403).send(responses.error('Doctor not authorized to access this patient\'s documents'));
+            }
+          } catch (authErr) {
+            console.error('Error verifying doctor authorization:', authErr);
+            return res.status(403).send(responses.error('Unable to verify authorization'));
+          }
+        }
+      }
+    }
+
+    // If still no document found, search all users (fallback for authorized access)
     if (!document) {
-      return res.status(404).send(responses.error('Document not found'));
+      const allUsers = await User.find({ 'documents.documentId': documentId });
+      for (const u of allUsers) {
+        const doc = u.documents.find(d => d.documentId === documentId);
+        if (doc) {
+          // Verify doctor authorization
+          try {
+            const query = require('../query');
+            const patientDataStr = await query.getQuery('getPatientById', { patientId: u.userId }, userId);
+            const patientData = JSON.parse(patientDataStr);
+            
+            if (patientData.authorizedDoctors && patientData.authorizedDoctors.includes(userId)) {
+              document = doc;
+              break;
+            }
+          } catch (err) {
+            // Continue searching
+            continue;
+          }
+        }
+      }
+    }
+
+    if (!document) {
+      return res.status(404).send(responses.error('Document not found or access denied'));
     }
 
     // Check if file exists

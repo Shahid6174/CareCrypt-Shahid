@@ -18,16 +18,38 @@ exports.approveClaim = async (req,res,next) => {
   try{
     const userId = req.user.id;
     const { claimId, approvedAmount, notes } = req.body;
-    const payload = { claimId, insuranceAgentId: userId, approvedAmount, notes };
-    const result = await invoke.invokeTransaction('approveClaimByInsurance', payload, userId);
     
-    // Get claim to find patient ID
+    // First, check the claim status and auto-review if needed
     let claim = null;
     try {
       const claimResult = await query.getQuery('getClaimById', { claimId }, userId);
       claim = JSON.parse(claimResult);
+      
+      // If claim is in PENDING_INSURANCE_REVIEW status, auto-review it first
+      if (claim.status === 'PENDING_INSURANCE_REVIEW') {
+        console.log(`Auto-reviewing claim ${claimId} before approval`);
+        await invoke.invokeTransaction('reviewClaimByAgent', {
+          claimId,
+          agentId: userId,
+          notes: notes || 'Reviewed by agent before approval'
+        }, userId);
+      }
     } catch(e) {
-      console.error('Error fetching claim for notification:', e);
+      console.error('Error checking/reviewing claim:', e);
+      // Continue with approval attempt
+    }
+    
+    const payload = { claimId, insuranceAgentId: userId, approvedAmount, notes };
+    const result = await invoke.invokeTransaction('approveClaimByInsurance', payload, userId);
+    
+    // Refresh claim data after approval
+    if (!claim) {
+      try {
+        const claimResult = await query.getQuery('getClaimById', { claimId }, userId);
+        claim = JSON.parse(claimResult);
+      } catch(e) {
+        console.error('Error fetching claim for notification:', e);
+      }
     }
     
     // Award coins for reviewing claim (with accuracy bonus)
