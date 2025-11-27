@@ -3,7 +3,7 @@ import Layout from '../../components/Layout'
 import InsuranceStatistics from '../../components/InsuranceStatistics'
 import { 
   FiFileText, FiUser, FiCheckCircle, FiXCircle, FiEye,
-  FiDollarSign, FiClock, FiFile, FiPaperclip, FiActivity
+  FiDollarSign, FiClock, FiFile, FiPaperclip, FiActivity, FiAward
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -223,7 +223,8 @@ const InsuranceDashboard = () => {
 
   const navItems = [
     { path: '/insurance/dashboard', label: 'Claims', icon: <FiFileText className="w-5 h-5" /> },
-    { path: '/insurance/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> }
+    { path: '/insurance/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> },
+    { path: '/rewards', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> }
   ]
 
   return (
