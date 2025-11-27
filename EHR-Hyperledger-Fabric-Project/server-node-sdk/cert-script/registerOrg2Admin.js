@@ -2,6 +2,12 @@
  * Copyright IBM Corp. All Rights Reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
+ * 
+ * This script enrolls the CA bootstrap admin as "insuranceAdmin".
+ * insuranceAdmin is used for REGISTERING new users with the CA.
+ * 
+ * NOTE: insuranceAdmin does NOT have role/uuid attributes.
+ * For chaincode operations that require role=insuranceAdmin, use insuranceCompany01 (created by onboardInsuranceCompany.js)
  */
 
 'use strict';
@@ -34,7 +40,9 @@ async function main() {
             return;
         }
 
-        // Enroll the admin user, and import the new identity into the wallet.
+        // Enroll the CA bootstrap admin and store as insuranceAdmin
+        // This admin is used for REGISTERING new users with the CA
+        console.log('Enrolling CA bootstrap admin as "insuranceAdmin"...');
         const enrollment = await ca.enroll({ enrollmentID: 'admin', enrollmentSecret: 'adminpw' });
         const x509Identity = {
             credentials: {
@@ -46,6 +54,7 @@ async function main() {
         };
         await wallet.put('insuranceAdmin', x509Identity);
         console.log('Successfully enrolled admin user "insuranceAdmin" and imported it into the wallet');
+        console.log('NOTE: insuranceAdmin is for CA registration only. Use insuranceCompany01 for chaincode operations.');
 
     } catch (error) {
         console.error(`Failed to enroll admin user "insuranceAdmin": ${error}`);

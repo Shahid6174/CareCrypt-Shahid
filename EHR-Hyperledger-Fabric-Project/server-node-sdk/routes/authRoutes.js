@@ -16,18 +16,18 @@ router.post('/loginAdmin', auth.loginAdmin);
 router.post('/loginHospitalAdmin', auth.loginHospitalAdmin);
 router.post('/loginInsuranceAdmin', auth.loginInsuranceAdmin);
 
-// Admin endpoints to complete blockchain registration
+// Admin endpoints to complete blockchain registration (hardcoded identities - no header required)
 router.post('/completePatientRegistration', auth.completePatientRegistration);
-router.post('/completeDoctorRegistration', requireUser, auth.completeDoctorRegistration);
-router.post('/completeInsuranceAgentRegistration', requireUser, auth.completeInsuranceAgentRegistration);
+router.post('/completeDoctorRegistration', auth.completeDoctorRegistration);
+router.post('/completeInsuranceAgentRegistration', auth.completeInsuranceAgentRegistration);
 
 // Legacy admin registration endpoints
 router.post('/registerHospitalAdmin', auth.registerHospitalAdmin);
 router.post('/registerInsuranceAdmin', auth.registerInsuranceAdmin);
 
-// Legacy endpoints for backward compatibility
+// Legacy endpoints for backward compatibility (hardcoded identities - no header required)
 router.post('/registerPatientLegacy', auth.registerPatientLegacy);
-router.post('/registerDoctorLegacy', requireUser, auth.registerDoctorLegacy);
-router.post('/registerInsuranceAgentLegacy', requireUser, auth.registerInsuranceAgentLegacy);
+router.post('/registerDoctorLegacy', auth.registerDoctorLegacy);
+router.post('/registerInsuranceAgentLegacy', auth.registerInsuranceAgentLegacy);
 
 module.exports = router;

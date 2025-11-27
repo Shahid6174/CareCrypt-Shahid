@@ -566,7 +566,9 @@ exports.registerInsuranceAgent = async (req, res, next) => {
 exports.completePatientRegistration = async (req, res, next) => {
   try {
     const { userId } = req.body;
-    const adminId = req.body.adminId || 'hospitalAdmin';
+    // Use hospitalAdmin for CA registration (has registrar privileges)
+    const registrarAdmin = 'hospitalAdmin';
+    const loggedBy = req.body.adminId || registrarAdmin;
     
     if (!userId) {
       return res.status(400).send(responses.error('userId is required'));
@@ -586,13 +588,14 @@ exports.completePatientRegistration = async (req, res, next) => {
       }));
     }
 
-    // Register and enroll on blockchain
-    await registerAndEnroll('org1', adminId, userId, [
+    // Register and enroll on blockchain using hospitalAdmin (has registrar privileges)
+    await registerAndEnroll('org1', registrarAdmin, userId, [
       { name: 'role', value: 'patient', ecert: true },
       { name: 'uuid', value: userId, ecert: true }
     ]);
 
-    // Onboard patient on chaincode
+    // Onboard patient on chaincode - patient uses their own identity
+    // Note: onboardPatient chaincode function doesn't require role/uuid attributes
     const payload = { patientId: userId, name: user.name, dob: user.dob, city: user.city };
     const result = await invoke.invokeTransaction('onboardPatient', payload, userId);
 
@@ -600,7 +603,7 @@ exports.completePatientRegistration = async (req, res, next) => {
     user.registeredOnChain = true;
     user.approvalStatus = 'approved';
     user.approvedAt = new Date();
-    appendApprovalHistory(user, 'approved', 'Patient enrollment completed on blockchain', adminId);
+    appendApprovalHistory(user, 'approved', 'Patient enrollment completed on blockchain', loggedBy);
     await user.save();
 
     res.status(200).send(responses.ok({ 
@@ -617,7 +620,10 @@ exports.completePatientRegistration = async (req, res, next) => {
 exports.completeDoctorRegistration = async (req, res, next) => {
   try {
     const { userId } = req.body;
-    const adminId = req.user?.id || req.body.adminId || 'hospitalAdmin';
+    // HARDCODED: CA registrar for user registration with CA
+    const caRegistrar = 'hospitalAdmin';
+    // HARDCODED: Chaincode admin with role=hospital attribute for chaincode operations
+    const chaincodeAdmin = 'Hospital01';
     
     if (!userId) {
       return res.status(400).send(responses.error('userId is required'));
@@ -637,21 +643,22 @@ exports.completeDoctorRegistration = async (req, res, next) => {
       }));
     }
 
-    // Register and enroll on blockchain
-    await registerAndEnroll('org1', 'hospitalAdmin', userId, [
+    // Register and enroll on blockchain using CA registrar (hospitalAdmin - has CA registrar privileges)
+    await registerAndEnroll('org1', caRegistrar, userId, [
       { name: 'role', value: 'doctor', ecert: true },
       { name: 'uuid', value: userId, ecert: true }
     ]);
 
-    // Onboard doctor on chaincode
+    // Onboard doctor on chaincode using the caller's identity (from x-userid header)
+    // The caller must have role=hospital attribute (e.g., Hospital01)
     const payload = { doctorId: userId, hospitalId: user.hospitalId, name: user.name, city: user.city };
-    const result = await invoke.invokeTransaction('onboardDoctor', payload, adminId);
+    const result = await invoke.invokeTransaction('onboardDoctor', payload, chaincodeAdmin);
 
     // Update MongoDB
     user.registeredOnChain = true;
     user.approvalStatus = 'approved';
     user.approvedAt = new Date();
-    appendApprovalHistory(user, 'approved', 'Doctor enrollment completed on blockchain', adminId);
+    appendApprovalHistory(user, 'approved', 'Doctor enrollment completed on blockchain', chaincodeAdmin);
     await user.save();
 
     res.status(200).send(responses.ok({ 
@@ -668,7 +675,10 @@ exports.completeDoctorRegistration = async (req, res, next) => {
 exports.completeInsuranceAgentRegistration = async (req, res, next) => {
   try {
     const { userId } = req.body;
-    const adminId = req.user?.id || req.body.adminId || 'insuranceAdmin';
+    // HARDCODED: CA registrar for user registration with CA
+    const caRegistrar = 'insuranceAdmin';
+    // HARDCODED: Chaincode admin with role=insuranceAdmin attribute for chaincode operations
+    const chaincodeAdmin = 'insuranceCompany01';
     
     if (!userId) {
       return res.status(400).send(responses.error('userId is required'));
@@ -688,21 +698,22 @@ exports.completeInsuranceAgentRegistration = async (req, res, next) => {
       }));
     }
 
-    // Register and enroll on blockchain
-    await registerAndEnroll('org2', 'insuranceAdmin', userId, [
+    // Register and enroll on blockchain using CA registrar (insuranceAdmin - has CA registrar privileges)
+    await registerAndEnroll('org2', caRegistrar, userId, [
       { name: 'role', value: 'insuranceAgent', ecert: true },
       { name: 'uuid', value: userId, ecert: true }
     ]);
 
-    // Onboard agent on chaincode
+    // Onboard agent on chaincode using the caller's identity (from x-userid header)
+    // The caller must have role=insuranceAdmin attribute (e.g., insuranceCompany01)
     const payload = { agentId: userId, insuranceId: user.insuranceId, name: user.name, city: user.city };
-    const result = await invoke.invokeTransaction('onboardInsuranceAgent', payload, adminId, 'org2');
+    const result = await invoke.invokeTransaction('onboardInsuranceAgent', payload, chaincodeAdmin, 'org2');
 
     // Update MongoDB
     user.registeredOnChain = true;
     user.approvalStatus = 'approved';
     user.approvedAt = new Date();
-    appendApprovalHistory(user, 'approved', 'Insurance agent enrollment completed on blockchain', adminId);
+    appendApprovalHistory(user, 'approved', 'Insurance agent enrollment completed on blockchain', chaincodeAdmin);
     await user.save();
 
     res.status(200).send(responses.ok({ 
@@ -779,46 +790,50 @@ exports.registerInsuranceAdmin = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// Legacy registerDoctor - for admin use
+// Legacy registerDoctor - for admin use (direct registration + blockchain enrollment)
 exports.registerDoctorLegacy = async (req, res, next) => {
   try {
-    const adminId = req.user?.id || req.body.adminId;
     const { doctorId, userId, hospitalId, name, city } = req.body;
     const newDoctorId = doctorId || userId;
+    // HARDCODED: CA registrar and chaincode admin
+    const caRegistrar = 'hospitalAdmin';
+    const chaincodeAdmin = 'Hospital01';
     
-    if (!adminId || !newDoctorId || !hospitalId || !name || !city) {
-      throw new Error('Missing required fields: adminId (or x-userid header), doctorId/userId, hospitalId, name, city');
+    if (!newDoctorId || !hospitalId || !name || !city) {
+      throw new Error('Missing required fields: doctorId/userId, hospitalId, name, city');
     }
 
-    await registerAndEnroll('org1', 'hospitalAdmin', newDoctorId, [
+    await registerAndEnroll('org1', caRegistrar, newDoctorId, [
       { name: 'role', value: 'doctor', ecert: true },
       { name: 'uuid', value: newDoctorId, ecert: true }
     ]);
 
     const payload = { doctorId: newDoctorId, hospitalId, name, city };
-    const result = await invoke.invokeTransaction('onboardDoctor', payload, adminId);
+    const result = await invoke.invokeTransaction('onboardDoctor', payload, chaincodeAdmin);
     res.status(200).send(responses.ok({ success: true, doctorId: newDoctorId, userId: newDoctorId, chaincodeResult: result }));
   } catch (err) { next(err); }
 };
 
-// Legacy registerInsuranceAgent - for admin use
+// Legacy registerInsuranceAgent - for admin use (direct registration + blockchain enrollment)
 exports.registerInsuranceAgentLegacy = async (req, res, next) => {
   try {
-    const adminId = req.user?.id || req.body.adminId;
     const { agentId, userId, insuranceId, name, city } = req.body;
     const newAgentId = agentId || userId;
+    // HARDCODED: CA registrar and chaincode admin
+    const caRegistrar = 'insuranceAdmin';
+    const chaincodeAdmin = 'insuranceCompany01';
     
-    if (!adminId || !newAgentId || !insuranceId || !name || !city) {
-      throw new Error('Missing required fields: adminId (or x-userid header), agentId/userId, insuranceId, name, city');
+    if (!newAgentId || !insuranceId || !name || !city) {
+      throw new Error('Missing required fields: agentId/userId, insuranceId, name, city');
     }
 
-    await registerAndEnroll('org2', 'insuranceAdmin', newAgentId, [
+    await registerAndEnroll('org2', caRegistrar, newAgentId, [
       { name: 'role', value: 'insuranceAgent', ecert: true },
       { name: 'uuid', value: newAgentId, ecert: true }
     ]);
 
     const payload = { agentId: newAgentId, insuranceId, name, city };
-    const result = await invoke.invokeTransaction('onboardInsuranceAgent', payload, adminId, 'org2');
+    const result = await invoke.invokeTransaction('onboardInsuranceAgent', payload, chaincodeAdmin, 'org2');
     res.status(200).send(responses.ok({ success: true, agentId: newAgentId, userId: newAgentId, chaincodeResult: result }));
   } catch (err) { next(err); }
 };

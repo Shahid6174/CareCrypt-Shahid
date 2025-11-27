@@ -288,7 +288,7 @@ const Register = () => {
                 type="text"
                 value={formData.insuranceId || ''}
                 onChange={(e) => handleInputChange('insuranceId', e.target.value)}
-                placeholder="Insurance01"
+                placeholder="insuranceCompany01"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 required
               />

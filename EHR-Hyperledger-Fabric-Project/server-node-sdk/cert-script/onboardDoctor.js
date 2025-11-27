@@ -90,9 +90,17 @@ async function main() {
             console.log(`An identity for "${doctorId}" already exists in the wallet`);
         }
 
-        // ---------------- Onboard Doctor using hospitalAdmin ----------------
+        // ---------------- Onboard Doctor using Hospital01 ----------------
+        // Hospital01 has role=hospital attribute required by chaincode
+        // hospitalAdmin is only for CA registration, not chaincode operations
+        const hospital01Identity = await wallet.get('Hospital01');
+        if (!hospital01Identity) {
+            console.error('Hospital01 identity missing. Run onboardHospital01.js first.');
+            return;
+        }
+
         const gateway = new Gateway();
-        await gateway.connect(ccp, { wallet, identity: 'hospitalAdmin', discovery: { enabled: true, asLocalhost: true } });
+        await gateway.connect(ccp, { wallet, identity: 'Hospital01', discovery: { enabled: true, asLocalhost: true } });
 
         const network = await gateway.getNetwork('mychannel');
         const contract = network.getContract('ehrChainCode');

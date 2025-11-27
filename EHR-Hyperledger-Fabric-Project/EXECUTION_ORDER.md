@@ -56,9 +56,12 @@ $ node cert-script/registerOrg1Admin.js
 $ node cert-script/registerOrg2Admin.js
 ```
 **Purpose**: 
-- Registers and enrolls `hospitalAdmin` for Org1
-- Registers and enrolls `insuranceAdmin` for Org2
+- Enrolls CA bootstrap admin as `hospitalAdmin` for Org1 (used for CA registration only)
+- Enrolls CA bootstrap admin as `insuranceAdmin` for Org2 (used for CA registration only)
 - Creates admin identities in the wallet
+
+**Note**: These admins are for **registering new users with the CA**, NOT for chaincode operations.
+For chaincode operations that require role attributes, use `Hospital01` and `insuranceCompany01` (created in Steps 5 & 7).
 
 **Verify**: Check wallet folder for `hospitalAdmin.id` and `insuranceAdmin.id`
 
@@ -215,6 +218,51 @@ $ docker-compose down
 3. **Wallet errors**: Delete wallet folder and re-run registration scripts
 4. **Port conflicts**: Change port in `app.js` if 5000 is in use
 5. **CA connection issues**: Verify CA containers are running (`docker ps`)
+6. **"Missing role or uuid in client certificate attributes" error**: 
+   - This means admin identities were created without proper attributes
+   - Follow the "Full Reset" steps below
+
+### Common Error: Missing role or uuid in client certificate attributes
+
+This error occurs when trying to complete registration for doctors or insurance agents. The chaincode requires specific role attributes that only certain identities have.
+
+**Understanding the Identity Architecture:**
+- `hospitalAdmin` / `insuranceAdmin` = CA bootstrap admins (for REGISTERING new users with the CA)
+- `Hospital01` = Has `role=hospital` attribute (for CHAINCODE operations like onboarding doctors)
+- `insuranceCompany01` = Has `role=insuranceAdmin` attribute (for CHAINCODE operations like onboarding agents)
+
+**Solution - Full Reset:**
+```bash
+# 1. Stop the network
+cd fabric-samples/test-network
+./network.sh down
+
+# 2. Delete the wallet
+rm -rf ../../server-node-sdk/wallet/*
+
+# 3. Restart the network
+./network.sh up createChannel -ca -s couchdb
+
+# 4. Redeploy chaincode
+./network.sh deployCC -ccn ehrChainCode -ccp ../asset-transfer-basic/chaincode-javascript/ -ccl javascript
+
+# 5. Register CA admins (for user registration)
+cd ../../server-node-sdk/
+node cert-script/registerOrg1Admin.js   # Creates hospitalAdmin (CA admin)
+node cert-script/registerOrg2Admin.js   # Creates insuranceAdmin (CA admin)
+
+# 6. Onboard entities with proper role attributes
+node cert-script/onboardHospital01.js         # Creates Hospital01 with role=hospital
+node cert-script/onboardInsuranceCompany.js   # Creates insuranceCompany01 with role=insuranceAdmin
+
+# 7. Start the server
+npm run dev
+```
+
+**Note on Certificate Attributes:**
+- `Hospital01` has `role=hospital` (required by chaincode for onboarding doctors)
+- `insuranceCompany01` has `role=insuranceAdmin` (required by chaincode for onboarding agents)
+- The API automatically uses these identities for chaincode operations
 
 ---
 
