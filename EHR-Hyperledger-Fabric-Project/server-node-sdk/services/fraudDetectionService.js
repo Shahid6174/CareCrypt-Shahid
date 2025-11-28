@@ -377,11 +377,13 @@ class FraudDetectionService {
       }
     };
 
-    const allText = documents
+    // Keep both original and lowercase versions
+    const allTextOriginal = documents
       .filter(doc => doc.ocr && doc.ocr.success)
       .map(doc => doc.ocr.text)
-      .join(' ')
-      .toLowerCase();
+      .join(' ');
+    
+    const allText = allTextOriginal.toLowerCase();
 
     if (allText.length === 0) {
       result.score += 30;
@@ -394,10 +396,10 @@ class FraudDetectionService {
       const patientName = await this.getPatientName(claimData.patientId);
       
       if (patientName) {
-        // Extract name from OCR text
+        // Extract name from OCR text (use original case for name matching)
         const namePatterns = [
-          /patient\s*(?:name)?[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
-          /name\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+          /patient\s*(?:name)?[\s:]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+          /name\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
           /\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b/g // General name pattern
         ];
 
@@ -405,7 +407,7 @@ class FraudDetectionService {
         let foundName = null;
 
         for (const pattern of namePatterns) {
-          const matches = allText.matchAll(pattern);
+          const matches = allTextOriginal.matchAll(pattern);
           for (const match of matches) {
             const extractedName = match[1];
             const similarity = this.calculateStringSimilarity(patientName, extractedName);
