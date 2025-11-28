@@ -11,7 +11,6 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import PatientDashboard from './pages/patient/PatientDashboard'
 import DoctorDashboard from './pages/doctor/DoctorDashboard'
 import InsuranceDashboard from './pages/insurance/InsuranceDashboard'
-import RewardsPage from './pages/RewardsPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const ROLE_TO_PATH = {
@@ -85,12 +84,6 @@ function AppRoutes() {
       <Route path="/insurance/dashboard" element={
         <ProtectedRoute role="insuranceAgent">
           <InsuranceDashboard />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/rewards" element={
-        <ProtectedRoute role={['patient', 'doctor', 'insuranceAgent', 'admin', 'systemAdmin', 'hospitalAdmin', 'insuranceAdmin']}>
-          <RewardsPage />
         </ProtectedRoute>
       } />
       

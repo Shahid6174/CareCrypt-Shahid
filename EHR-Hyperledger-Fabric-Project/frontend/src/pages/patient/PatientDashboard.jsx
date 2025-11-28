@@ -4,7 +4,7 @@ import Layout from '../../components/Layout'
 import { 
   FiFileText, FiPlus, FiUser, FiHeart, FiShield,
   FiUpload, FiEdit, FiEye, FiDownload, FiTrash2, FiFile,
-  FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPaperclip, FiAward
+  FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPaperclip
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -350,8 +350,7 @@ const PatientDashboard = () => {
     { path: '/patient/dashboard', label: 'Medical Records', icon: <FiHeart className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Documents', icon: <FiFile className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> },
-    { path: '/patient/dashboard', label: 'Access Control', icon: <FiShield className="w-5 h-5" /> },
-    { path: '/rewards', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> }
+    { path: '/patient/dashboard', label: 'Access Control', icon: <FiShield className="w-5 h-5" /> }
   ]
 
   const categoryColors = {

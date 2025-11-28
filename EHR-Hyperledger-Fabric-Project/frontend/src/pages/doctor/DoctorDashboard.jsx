@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
 import { 
   FiFileText, FiUser, FiUsers, FiCheckCircle, FiXCircle,
-  FiPlus, FiEye, FiHeart, FiActivity, FiFile, FiPaperclip, FiAward
+  FiPlus, FiEye, FiHeart, FiActivity, FiFile, FiPaperclip
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -193,8 +193,7 @@ const DoctorDashboard = () => {
   const navItems = [
     { path: '/doctor/dashboard', label: 'Patients', icon: <FiUsers className="w-5 h-5" /> },
     { path: '/doctor/dashboard', label: 'Claims to Verify', icon: <FiFileText className="w-5 h-5" /> },
-    { path: '/doctor/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> },
-    { path: '/rewards', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> }
+    { path: '/doctor/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> }
   ]
 
   return (

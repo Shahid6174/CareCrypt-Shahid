@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import Layout from '../../components/Layout'
 import { 
   FiUsers, FiUserCheck, FiShield, FiCheckCircle, FiXCircle,
-  FiClock, FiActivity, FiPlus, FiDollarSign, FiAlertTriangle, FiHeart, FiAward
+  FiClock, FiActivity, FiPlus, FiDollarSign, FiAlertTriangle, FiHeart
 } from 'react-icons/fi'
 import { getRegistrationRequests, approveRegistration, rejectRegistration } from '../../services/registrationService'
 import api from '../../services/api'
@@ -237,8 +237,7 @@ const AdminDashboard = () => {
 
   const navItems = [
     { path: '/admin/dashboard', label: 'Registration Requests', icon: <FiUsers className="w-5 h-5" /> },
-    { path: '/admin/dashboard', label: 'Direct Registration', icon: <FiPlus className="w-5 h-5" /> },
-    { path: '/rewards', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> }
+    { path: '/admin/dashboard', label: 'Direct Registration', icon: <FiPlus className="w-5 h-5" /> }
   ]
 
   // Show loading while auth is being checked
