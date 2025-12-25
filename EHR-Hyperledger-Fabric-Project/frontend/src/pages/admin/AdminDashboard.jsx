@@ -503,13 +503,20 @@ const AdminDashboard = () => {
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          {Object.entries(request.data).map(([key, value]) => (
-                            <div key={key}>
-                              <p className="text-xs text-gray-500 capitalize font-medium">{key.replace(/([A-Z])/g, ' $1')}</p>
-                              <p className="text-sm font-semibold text-gray-900">{value || '-'}</p>
-                            </div>
-                          ))}
-                        </div>
+  {Object.entries(request.data).map(([key, value]) => {
+    if (key === "password") return null;
+    return (
+      <div key={key}>
+        <p className="text-xs text-gray-500 capitalize font-medium">
+          {key.replace(/([A-Z])/g, ' $1')}
+        </p>
+        <p className="text-sm font-semibold text-gray-900">
+          {value || '-'}
+        </p>
+      </div>
+    );
+  })}
+</div>
                       </div>
                       
                       {request.status === 'pending' && (
