@@ -3,7 +3,8 @@ import Layout from '../../components/Layout'
 import InsuranceStatistics from '../../components/InsuranceStatistics'
 import { 
   FiFileText, FiUser, FiCheckCircle, FiXCircle, FiEye,
-  FiDollarSign, FiClock, FiFile, FiPaperclip, FiActivity
+  FiDollarSign, FiClock, FiFile, FiPaperclip, FiActivity,
+  FiAward
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -31,6 +32,7 @@ const InsuranceDashboard = () => {
     rejectionReason: ''
   })
   const [statistics, setStatistics] = useState(null)
+  const [rewards, setRewards] = useState(null)
 
   // Show loading while auth is being checked
   if (authLoading) {
@@ -68,6 +70,7 @@ const InsuranceDashboard = () => {
   useEffect(() => {
     if (!user || !user.userId || authLoading || user.restricted) return
     loadData()
+    loadRewards()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user, authLoading])
 
@@ -78,6 +81,8 @@ const InsuranceDashboard = () => {
       await loadProfile()
     } else if (activeTab === 'statistics') {
       await loadStatistics()
+    } else if (activeTab === 'rewards') {
+      await loadRewards()
     }
   }
 
@@ -137,6 +142,28 @@ const InsuranceDashboard = () => {
     }
   }
 
+  const loadRewards = async () => {
+    if (!user || !user.userId) return
+    
+    try {
+      const response = await api.get('/rewards/summary')
+      setRewards(response.data?.data || {
+        totalCoins: 0,
+        level: 1,
+        badge: 'Beginner',
+        streak: { currentStreak: 0, longestStreak: 0 }
+      })
+    } catch (error) {
+      console.error('Error loading rewards:', error)
+      setRewards({
+        totalCoins: 0,
+        level: 1,
+        badge: 'Beginner',
+        streak: { currentStreak: 0, longestStreak: 0 }
+      })
+    }
+  }
+
   const loadClaimDetails = async (claimId) => {
     try {
       setLoading(true)
@@ -167,7 +194,14 @@ const InsuranceDashboard = () => {
       })
       
       if (response.data.success) {
-        toast.success('Claim approved successfully!')
+        const rewardData = response.data.data?.rewards
+        if (rewardData) {
+          const coinsMsg = rewardData.totalCoinsAwarded || rewardData.coinsAwarded || 0
+          const levelMsg = rewardData.leveledUp ? ` 🎉 Level Up! Now Level ${rewardData.level}` : ''
+          toast.success(`Claim approved successfully! 🪙 +${coinsMsg} coins${levelMsg}`)
+        } else {
+          toast.success('Claim approved successfully!')
+        }
         const claim = claims.find(c => c.claimId === approveForm.claimId)
         if (claim) {
           notifyClaimProcessed(
@@ -181,6 +215,7 @@ const InsuranceDashboard = () => {
         setShowApproveModal(false)
         setApproveForm({ claimId: '', approvedAmount: '', notes: '' })
         loadClaims()
+        await loadRewards() // Refresh rewards after approval
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to approve claim')
@@ -199,7 +234,14 @@ const InsuranceDashboard = () => {
       })
       
       if (response.data.success) {
-        toast.success('Claim rejected')
+        const rewardData = response.data.data?.rewards
+        if (rewardData) {
+          const coinsMsg = rewardData.totalCoinsAwarded || rewardData.coinsAwarded || 0
+          const levelMsg = rewardData.leveledUp ? ` 🎉 Level Up! Now Level ${rewardData.level}` : ''
+          toast.success(`Claim rejected. 🪙 +${coinsMsg} coins${levelMsg}`)
+        } else {
+          toast.success('Claim rejected')
+        }
         const claim = claims.find(c => c.claimId === rejectForm.claimId)
         if (claim) {
           notifyClaimProcessed(
@@ -213,6 +255,7 @@ const InsuranceDashboard = () => {
         setShowRejectModal(false)
         setRejectForm({ claimId: '', rejectionReason: '' })
         loadClaims()
+        await loadRewards() // Refresh rewards after rejection
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to reject claim')
@@ -223,16 +266,31 @@ const InsuranceDashboard = () => {
 
   const navItems = [
     { path: '/insurance/dashboard', label: 'Claims', icon: <FiFileText className="w-5 h-5" /> },
+    { path: '/insurance/dashboard', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> },
     { path: '/insurance/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> }
   ]
+
+  const getBadgeColor = (badge) => {
+    const colors = {
+      'Beginner': 'bg-gray-100 text-gray-800',
+      'Bronze': 'bg-orange-100 text-orange-800',
+      'Silver': 'bg-gray-200 text-gray-800',
+      'Gold': 'bg-yellow-100 text-yellow-800',
+      'Platinum': 'bg-purple-100 text-purple-800',
+      'Diamond': 'bg-blue-100 text-blue-800',
+      'Legend': 'bg-red-100 text-red-800'
+    }
+    return colors[badge] || colors['Beginner']
+  }
 
   return (
     <Layout title="Insurance Agent Dashboard" navItems={navItems}>
       <div className="space-y-6">
+        
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100">
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              {['claims', 'statistics', 'profile'].map((tab) => (
+              {['claims', 'statistics', 'rewards', 'profile'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -532,6 +590,88 @@ const InsuranceDashboard = () => {
 
             {activeTab === 'statistics' && (
               <InsuranceStatistics statistics={statistics} loading={loading} />
+            )}
+
+            {activeTab === 'rewards' && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900">Your Rewards</h2>
+                
+                {/* Rewards Summary Card */}
+                <div className="bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 rounded-2xl shadow-lg border-2 border-yellow-200 p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiDollarSign className="w-5 h-5 text-yellow-600" />
+                        <p className="text-sm text-gray-600 font-medium">Total Coins</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.totalCoins || 0}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiAward className="w-5 h-5 text-purple-600" />
+                        <p className="text-sm text-gray-600 font-medium">Level</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.level || 1}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiAward className="w-5 h-5 text-blue-600" />
+                        <p className="text-sm text-gray-600 font-medium">Badge</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getBadgeColor(rewards?.badge || 'Beginner')}`}>
+                        {rewards?.badge || 'Beginner'}
+                      </span>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className="text-xl">🔥</span>
+                        <p className="text-sm text-gray-600 font-medium">Streak</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.streak?.currentStreak || 0} days</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Section */}
+                {rewards && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Progress to Next Badge</h3>
+                      {rewards.nextBadge && (
+                        <>
+                          <p className="text-sm text-gray-600 mb-2">Next Badge: <span className="font-semibold">{rewards.nextBadge}</span></p>
+                          <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                            <div 
+                              className="bg-yellow-500 h-4 rounded-full transition-all"
+                              style={{ 
+                                width: `${Math.min(100, ((rewards.totalCoins / (rewards.totalCoins + (rewards.coinsToNextBadge || 100))) * 100))}%` 
+                              }}
+                            ></div>
+                          </div>
+                          <p className="text-sm text-gray-600">{rewards.coinsToNextBadge || 0} coins to go</p>
+                        </>
+                      )}
+                      {!rewards.nextBadge && (
+                        <p className="text-sm text-gray-600">You've reached the highest badge! 🎉</p>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Streak Information</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Current Streak</span>
+                          <span className="font-bold text-orange-600">🔥 {rewards.streak?.currentStreak || 0} days</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Longest Streak</span>
+                          <span className="font-bold text-purple-600">{rewards.streak?.longestStreak || 0} days</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {activeTab === 'profile' && (

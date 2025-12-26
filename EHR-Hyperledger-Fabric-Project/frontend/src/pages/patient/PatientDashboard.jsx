@@ -4,7 +4,8 @@ import Layout from '../../components/Layout'
 import { 
   FiFileText, FiPlus, FiUser, FiHeart, FiShield,
   FiUpload, FiEdit, FiEye, FiDownload, FiTrash2, FiFile,
-  FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPaperclip
+  FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPaperclip,
+  FiDollarSign, FiAward
 } from 'react-icons/fi'
 import api from '../../services/api'
 import { toast } from 'react-toastify'
@@ -40,6 +41,7 @@ const PatientDashboard = () => {
     category: 'medical_record',
     description: ''
   })
+  const [rewards, setRewards] = useState(null)
 
   // Show loading while auth is being checked
   if (authLoading) {
@@ -79,6 +81,7 @@ const PatientDashboard = () => {
     loadData()
     loadFraudStatus()
     loadDoctors()
+    loadRewards()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeTab, authLoading])
 
@@ -94,6 +97,8 @@ const PatientDashboard = () => {
         await loadProfile()
       } else if (activeTab === 'documents') {
         await loadDocuments()
+      } else if (activeTab === 'rewards') {
+        await loadRewards()
       }
     } catch (error) {
       console.error('Error in loadData:', error)
@@ -195,6 +200,29 @@ const PatientDashboard = () => {
     }
   }
 
+  const loadRewards = async () => {
+    if (!user || !user.userId) return
+    
+    try {
+      const response = await api.get('/rewards/summary')
+      setRewards(response.data?.data || {
+        totalCoins: 0,
+        level: 1,
+        badge: 'Beginner',
+        streak: { currentStreak: 0, longestStreak: 0 }
+      })
+    } catch (error) {
+      console.error('Error loading rewards:', error)
+      // Set default values if error
+      setRewards({
+        totalCoins: 0,
+        level: 1,
+        badge: 'Beginner',
+        streak: { currentStreak: 0, longestStreak: 0 }
+      })
+    }
+  }
+
   const handleClaimDocumentChange = (e) => {
     const files = Array.from(e.target.files)
     setClaimDocuments(files)
@@ -228,10 +256,18 @@ const PatientDashboard = () => {
       })
 
       if (response.data.success) {
-        toast.success('Document uploaded successfully!')
+        const rewardData = response.data.data?.rewards
+        if (rewardData) {
+          const coinsMsg = rewardData.totalCoinsAwarded || rewardData.coinsAwarded || 0
+          const levelMsg = rewardData.leveledUp ? ` 🎉 Level Up! Now Level ${rewardData.level}` : ''
+          toast.success(`Document uploaded successfully! 🪙 +${coinsMsg} coins${levelMsg}`)
+        } else {
+          toast.success('Document uploaded successfully!')
+        }
         setShowDocumentUpload(false)
         setUploadForm({ file: null, category: 'medical_record', description: '' })
         await loadDocuments()
+        await loadRewards() // Refresh rewards after document upload
       }
     } catch (error) {
       console.error('Error uploading document:', error)
@@ -319,7 +355,16 @@ const PatientDashboard = () => {
       })
       
       if (response.data.success) {
-        toast.success('Claim submitted successfully!')
+        const rewardData = response.data.data?.rewards
+        if (rewardData) {
+          const coinsMsg = rewardData.totalCoinsAwarded || rewardData.coinsAwarded || 0
+          const streakMsg = rewardData.streakBonusAwarded ? ` (+${rewardData.streakBonusAwarded} streak bonus)` : ''
+          const levelMsg = rewardData.leveledUp ? ` 🎉 Level Up! Now Level ${rewardData.level}` : ''
+          const badgeMsg = rewardData.badgeUpgraded ? ` 🏅 Badge Upgraded: ${rewardData.badge}` : ''
+          toast.success(`Claim submitted successfully! 🪙 +${coinsMsg} coins${streakMsg}${levelMsg}${badgeMsg}`)
+        } else {
+          toast.success('Claim submitted successfully!')
+        }
         if (claimForm.doctorId) {
           notifyClaimSubmitted(user.userId, response.data.data?.claimId || 'NEW', claimForm.doctorId)
         }
@@ -336,6 +381,7 @@ const PatientDashboard = () => {
           documents: []
         })
         await loadClaims()
+        await loadRewards() // Refresh rewards after claim submission
       }
     } catch (error) {
       console.error('Error submitting claim:', error)
@@ -349,6 +395,7 @@ const PatientDashboard = () => {
     { path: '/patient/dashboard', label: 'Claims', icon: <FiFileText className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Medical Records', icon: <FiHeart className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Documents', icon: <FiFile className="w-5 h-5" /> },
+    { path: '/patient/dashboard', label: 'Rewards', icon: <FiAward className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Profile', icon: <FiUser className="w-5 h-5" /> },
     { path: '/patient/dashboard', label: 'Access Control', icon: <FiShield className="w-5 h-5" /> }
   ]
@@ -360,6 +407,19 @@ const PatientDashboard = () => {
     scan: 'bg-pink-100 text-pink-700',
     insurance: 'bg-yellow-100 text-yellow-700',
     other: 'bg-gray-100 text-gray-700'
+  }
+
+  const getBadgeColor = (badge) => {
+    const colors = {
+      'Beginner': 'bg-gray-100 text-gray-800',
+      'Bronze': 'bg-orange-100 text-orange-800',
+      'Silver': 'bg-gray-200 text-gray-800',
+      'Gold': 'bg-yellow-100 text-yellow-800',
+      'Platinum': 'bg-purple-100 text-purple-800',
+      'Diamond': 'bg-blue-100 text-blue-800',
+      'Legend': 'bg-red-100 text-red-800'
+    }
+    return colors[badge] || colors['Beginner']
   }
 
   return (
@@ -461,7 +521,7 @@ const PatientDashboard = () => {
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100">
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              {['claims', 'records', 'documents', 'profile', 'access'].map((tab) => (
+              {['claims', 'records', 'documents', 'rewards', 'profile', 'access'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1035,6 +1095,89 @@ const PatientDashboard = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Rewards Tab */}
+            {activeTab === 'rewards' && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-900">Your Rewards</h2>
+                
+                {/* Rewards Summary Card */}
+                <div className="bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 rounded-2xl shadow-lg border-2 border-yellow-200 p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiDollarSign className="w-5 h-5 text-yellow-600" />
+                        <p className="text-sm text-gray-600 font-medium">Total Coins</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.totalCoins || 0}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiAward className="w-5 h-5 text-purple-600" />
+                        <p className="text-sm text-gray-600 font-medium">Level</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.level || 1}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <FiAward className="w-5 h-5 text-blue-600" />
+                        <p className="text-sm text-gray-600 font-medium">Badge</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getBadgeColor(rewards?.badge || 'Beginner')}`}>
+                        {rewards?.badge || 'Beginner'}
+                      </span>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className="text-xl">🔥</span>
+                        <p className="text-sm text-gray-600 font-medium">Streak</p>
+                      </div>
+                      <p className="text-3xl font-bold text-gray-900">{rewards?.streak?.currentStreak || 0} days</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Section */}
+                {rewards && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Progress to Next Badge</h3>
+                      {rewards.nextBadge && (
+                        <>
+                          <p className="text-sm text-gray-600 mb-2">Next Badge: <span className="font-semibold">{rewards.nextBadge}</span></p>
+                          <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                            <div 
+                              className="bg-yellow-500 h-4 rounded-full transition-all"
+                              style={{ 
+                                width: `${Math.min(100, ((rewards.totalCoins / (rewards.totalCoins + (rewards.coinsToNextBadge || 100))) * 100))}%` 
+                              }}
+                            ></div>
+                          </div>
+                          <p className="text-sm text-gray-600">{rewards.coinsToNextBadge || 0} coins to go</p>
+                        </>
+                      )}
+                      {!rewards.nextBadge && (
+                        <p className="text-sm text-gray-600">You've reached the highest badge! 🎉</p>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Streak Information</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Current Streak</span>
+                          <span className="font-bold text-orange-600">🔥 {rewards.streak?.currentStreak || 0} days</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Longest Streak</span>
+                          <span className="font-bold text-purple-600">{rewards.streak?.longestStreak || 0} days</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
